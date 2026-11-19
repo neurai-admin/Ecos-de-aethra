@@ -35,6 +35,9 @@ public:
 
 private:
     friend class AAethraVoxelChunk;
+#if WITH_DEV_AUTOMATION_TESTS
+    friend class FAethraVoxelChunkSeams;
+#endif
 
     using FChunkEdits = TMap<int32, EAethraBlock>;
 
@@ -59,5 +62,6 @@ private:
     void LoadEdits();
     void ApplyChunkEdits(FIntPoint Chunk, TArray<EAethraBlock>& Blocks) const;
     void ApplyColumnEdits(FIntPoint Point, TArrayView<EAethraBlock> Column) const;
+    void UpdateStreaming(FIntPoint Center);
     void LoadChunk(FIntPoint Chunk, bool bAsyncCollision = true);
 };

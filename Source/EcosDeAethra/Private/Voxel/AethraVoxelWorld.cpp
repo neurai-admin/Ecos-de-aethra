@@ -94,6 +94,11 @@ void AAethraVoxelWorld::Tick(float DeltaSeconds)
             Horizon->Update(Seed, Center, StreamingRadius);
         }
     }
+    UpdateStreaming(Center);
+}
+
+void AAethraVoxelWorld::UpdateStreaming(FIntPoint Center)
+{
     for (auto It = Loaded.CreateIterator(); It; ++It)
     {
         const FIntPoint Offset = It.Key() - Center;
@@ -213,23 +218,20 @@ bool AAethraVoxelWorld::SetBlock(FIntVector Cell, EAethraBlock Block)
     if (const auto* Chunk = Loaded.Find(Coordinate))
     {
         (*Chunk)->SetBlock(BlockIndex, Block);
-        (*Chunk)->Rebuild(*this);
     }
 
-    const FIntPoint Adjacent[] = {
-        { Coordinate.X - 1, Coordinate.Y }, { Coordinate.X + 1, Coordinate.Y },
-        { Coordinate.X, Coordinate.Y - 1 }, { Coordinate.X, Coordinate.Y + 1 }
-    };
-    const bool bOnEdge[] = {
-        Local.X == 0, Local.X == ChunkSize - 1, Local.Y == 0, Local.Y == ChunkSize - 1
-    };
-    for (int32 Edge = 0; Edge < UE_ARRAY_COUNT(Adjacent); ++Edge)
+    // A corner column contributes to vertex AO in the diagonal chunk as well as both side chunks.
+    const int32 MinX = Local.X == 0 ? -1 : 0;
+    const int32 MaxX = Local.X == ChunkSize - 1 ? 1 : 0;
+    const int32 MinY = Local.Y == 0 ? -1 : 0;
+    const int32 MaxY = Local.Y == ChunkSize - 1 ? 1 : 0;
+    for (int32 Y = MinY; Y <= MaxY; ++Y)
     {
-        if (bOnEdge[Edge])
+        for (int32 X = MinX; X <= MaxX; ++X)
         {
-            if (const auto* Neighbor = Loaded.Find(Adjacent[Edge]))
+            if (const auto* Chunk = Loaded.Find(Coordinate + FIntPoint(X, Y)))
             {
-                (*Neighbor)->Rebuild(*this);
+                (*Chunk)->Rebuild(*this);
             }
         }
     }

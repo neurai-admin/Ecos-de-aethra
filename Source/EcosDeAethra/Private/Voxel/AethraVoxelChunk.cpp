@@ -70,8 +70,11 @@ void AAethraVoxelChunk::Initialize(AAethraVoxelWorld& World, FIntPoint Coordinat
 {
     CSV_SCOPED_TIMING_STAT(Aethra, ChunkLoad);
     Chunk = Coordinate;
-    GenerateChunk(Chunk, World.Seed, Blocks);
-    World.ApplyChunkEdits(Chunk, Blocks);
+    {
+        CSV_SCOPED_TIMING_STAT(Aethra, ChunkGenerate);
+        GenerateChunk(Chunk, World.Seed, Blocks);
+        World.ApplyChunkEdits(Chunk, Blocks);
+    }
     // Synchronous cooking cost ~7 ms per streamed chunk and up to ~60 ms per edit (Marco 02 profile).
     Mesh->bUseAsyncCooking = bAsyncCollision;
     Rebuild(World);
