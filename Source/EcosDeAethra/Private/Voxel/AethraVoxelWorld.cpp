@@ -363,6 +363,15 @@ void AAethraVoxelWorld::LoadEdits()
         }
     }
 
+    if (Revision > 0)
+    {
+        int32 Count = 0;
+        for (const auto& Chunk : ChunkEdits)
+        {
+            Count += Chunk.Value.Num();
+        }
+        UE_LOG(LogAethraVoxel, Display, TEXT("Loaded %d voxel edits (revision %lld) for seed %d."), Count, Revision, Seed);
+    }
     if (bSlotExists && Revision == 0)
     {
         bSaveWritable = false;
