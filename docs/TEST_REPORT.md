@@ -1,5 +1,59 @@
 # Relatório de testes
 
+## Correções do Marco 02 — 19/11/2026
+
+Worktree independente baseada em `b0e4cc7`, Unreal Engine 5.8.4 (CL 58902052), Ryzen 5 5500, RTX 3060 e 16 GB de RAM. Os resultados históricos dos Marcos 01 e 02 estão nas seções abaixo.
+
+| Verificação | Resultado |
+| --- | --- |
+| Configuração AFS | O plug-in e a conexão de rede estão desabilitados. A primeira tentativa de desligar apenas no INI regenerou uma credencial ao abrir o editor. Com o plug-in desabilitado no descritor, o token não reapareceu após abrir, compilar e empacotar. O valor anterior está em 14 commits do histórico compartilhado. A validade residual depende de algum pacote Android de desenvolvimento que ainda o utilize. |
+| Saída do benchmark | PowerShell 5.1 e 7 passaram em 14 nomes inválidos, rejeição de arquivos no lugar de diretórios e preservação de resultados ao repetir o nome. A criação das duas junções NTFS foi negada pelo sandbox, de modo que esses dois casos foram pulados. |
+| Compilação e automação | Alvo de editor compilado. Seis testes `Aethra.Voxel` passaram, incluindo `ChunkSeams`, que testa faces nas divisas, mudança de oclusão em cantos positivos e negativos e reposição após descarregar e carregar chunks. |
+| Build em Windows | Win64 Development arquivada em `Builds/Marco02Correcoes/Windows`. As capturas foram produzidas pelo executável empacotado fora do editor. A rota exercitou movimento, salto e edição com saves de teste próprios. |
+| Visual | As capturas equivalentes dos dois pacotes mostram água, vegetação, céu, sombras e horizonte. A correção preserva os materiais e a direção artística. |
+
+### Cook e procedência do pacote
+
+A primeira tentativa terminou antes do cook com MSVC C3859/C1076 e erro 1455 de memória virtual no executor XGE. A execução seguinte usou o executor local, com configuração de memória da worktree, e compilou o alvo de jogo. O UAT iniciou um cook completo com Zen em uma worktree sem cook prévio. Processou 507 pacotes, pulou zero incrementalmente e 7 por plataforma. O `UnrealEditor-Cmd.exe` encerrou com código 0, cerca de três segundos após `LogCook: Display: Done!`. Stage e archive terminaram, e o UAT saiu com código 0. A falha de encerramento original não se repetiu nessa execução e sua causa permanece indeterminada.
+
+Os quatro materiais versionados coincidiram com os hashes dos ponteiros LFS. Os quatro constam no Asset Registry do cook e no manifesto UFS do pacote. SHA-256 do executável interno `EcosDeAethra/Binaries/Win64/EcosDeAethra.exe` `aad5746c616834fbeb3f49ea5466551e9f049d6eede0bf9b37889d37991ddd6a`.
+
+### Benchmark empacotado a 1920 × 1080
+
+Uma sessão curta de 10 segundos simulados aqueceu cada pacote. A medição de cada pacote usou a rota de passo fixo a 60 Hz, com 5 segundos de aquecimento interno, VSync desligado, limite de FPS desligado e saves isolados. Cada CSV contém 3.601 frames para os 60 segundos de simulação. A resolução também foi conferida nas imagens produzidas pelo jogo.
+
+| Métrica | Marco 02 original | Marco 02 corrigido |
+| --- | ---: | ---: |
+| FPS médio | 112,0 | 112,2 |
+| 1% low | 54,2 FPS | 54,3 FPS |
+| Frame p95 | 10,07 ms | 10,11 ms |
+| Frame p99 | 15,83 ms | 15,17 ms |
+| Pior frame | 33,31 ms | 37,57 ms |
+| Game Thread média | 2,42 ms | 2,46 ms |
+| Render Thread média | 7,44 ms | 7,43 ms |
+| GPU média | 7,93 ms | 7,91 ms |
+| RAM média (PhysicalUsedMB) | 1.468,73 MB | 1.496,72 MB |
+| VRAM local média | 664,54 MB | 663,84 MB |
+| Geração de chunks por frame ativo | — | 0,15 ms |
+| Malha e aplicação por frame ativo | 3,09 ms | 3,33 ms |
+| Aplicação da malha por frame ativo | 1,34 ms | 1,44 ms |
+
+Na execução corrigida, o 1% de frames mais lentos teve 14,91 ms de Game Thread em média. Nesses frames, geração, construção e aplicação de malhas representaram em média 0,13 ms e 2,49 ms, respectivamente, com a aplicação incluída na medição de malha. A Render Thread esperou 8,38 ms em média nesses frames. O tempo exclusivo de montagem da malha chegou a 10,87 ms no pior frame medido para essa métrica, com média de 1,89 ms nos frames em que rodou. A amostra associa os picos ao trabalho da Game Thread e ao streaming, mas não isola um único responsável. Preserve a arquitetura atual e capture uma trilha Unreal Insights para atribuir o tempo restante antes de mover tarefas para workers.
+
+| CSV em `Saved/Bench` | SHA-256 |
+| --- | --- |
+| Corrigido `Profile(20261119_175023).csv` | `ac74ec79cbfbf6abd12fdac5090f22a8e97237442d6ff11e0dedeec5f1177879` |
+| Original `Profile(20261119_175125).csv` | `de63db40988e5c80ca8444f53ed8265abf429a8165b4549c899638ec26a3c5b2` |
+
+Na worktree de correções, execute a partir da raiz.
+
+```powershell
+& .\Tools\Bench\test-bench-output.ps1
+$exe = (Resolve-Path .\Builds\Marco02Correcoes\Windows\EcosDeAethra.exe).Path
+& .\Tools\Bench\bench.ps1 -Name warmup -Seconds 10 -Exe $exe
+& .\Tools\Bench\bench.ps1 -Name medicao -Seconds 60 -Exe $exe
+```
+
 ## Ambiente observado
 
 | Item | Resultado |
