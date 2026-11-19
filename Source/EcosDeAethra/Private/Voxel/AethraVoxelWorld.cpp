@@ -4,6 +4,8 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "HAL/IConsoleManager.h"
+#include "Voxel/AethraHorizon.h"
 #include "Voxel/AethraTerrain.h"
 #include "Voxel/AethraVoxelChunk.h"
 #include "Voxel/AethraWorldSave.h"
@@ -15,6 +17,9 @@ namespace
     constexpr int32 SaveFormat = 1;
     constexpr int32 ChunksPerFrame = 1;
     DEFINE_LOG_CATEGORY_STATIC(LogAethraVoxel, Log, All);
+
+    TAutoConsoleVariable<int32> CVarHorizon(TEXT("aethra.Horizon"), 1,
+        TEXT("Distant LOD horizon beyond the voxel radius (0 = off, 1 = on)."));
 }
 
 AAethraVoxelWorld::AAethraVoxelWorld()
@@ -75,6 +80,19 @@ void AAethraVoxelWorld::Tick(float DeltaSeconds)
     }
 
     const FIntPoint Center = ChunkAt(CellAt(Pawn->GetActorLocation()));
+    const bool bHorizon = CVarHorizon.GetValueOnGameThread() != 0;
+    if (bHorizon && !Horizon)
+    {
+        Horizon = GetWorld()->SpawnActor<AAethraHorizon>();
+    }
+    if (Horizon)
+    {
+        Horizon->SetActorHiddenInGame(!bHorizon);
+        if (bHorizon)
+        {
+            Horizon->Update(Seed, Center, StreamingRadius);
+        }
+    }
     for (auto It = Loaded.CreateIterator(); It; ++It)
     {
         const FIntPoint Offset = It.Key() - Center;
