@@ -2,7 +2,7 @@
 
 Fundação C++ do sandbox voxel para Windows, desenvolvida para Unreal Engine 5.8. O repositório oficial é [neurai-admin/Ecos-de-aethra](https://github.com/neurai-admin/Ecos-de-aethra).
 
-O pacote Win64 Development gerado no PC abre por `D:\ECOS_DE_AETHRA\Windows\EcosDeAethra.exe`. Mantenha a pasta `Windows` completa ao mover a build.
+O pacote Win64 Development do Marco 01 abre por `D:\ECOS_DE_AETHRA\Windows\EcosDeAethra.exe` e o do Marco 02 por `D:\ECOS_DE_AETHRA\Builds\Marco02\Windows\EcosDeAethra.exe`. Mantenha a pasta `Windows` completa ao mover a build.
 
 ## Rodar no Windows
 
@@ -32,8 +32,12 @@ powershell -ExecutionPolicy Bypass -File Tools\Benchench.ps1 -Name minha-medica
 
 Os materiais `M_AethraVoxel` e `M_AethraPlant` são gerados por `Tools/Editor/create_voxel_material.py`. Consulte a [passagem de trabalho](docs/HANDOFF.md) antes de continuar o desenvolvimento.
 
-O código inclui vale e colinas, árvores, pinheiros, arbustos, capim e flores, horizonte distante com LOD, iluminação atmosférica, câmera em primeira pessoa, blocos editáveis e salvamento das alterações por seed. O alvo de editor compilou na Unreal Engine 5.8.4 e os testes de automação passaram. Consulte o [relatório de testes](docs/TEST_REPORT.md).
+O código inclui vale e colinas, montanhas com neve além de 256 m, rios e lagos, carvalhos, pinheiros, bétulas, arbustos, capim e flores, texturas procedurais por tipo de bloco, folhagem recortada com vento, horizonte distante com LOD de ~1,3 km, iluminação atmosférica, câmera em primeira pessoa, blocos editáveis e salvamento das alterações por seed. O alvo de editor compilou na Unreal Engine 5.8.4 e os testes de automação passaram. Consulte o [relatório de testes](docs/TEST_REPORT.md).
 
 - [Visão do jogo](docs/GDD.md) e [roteiro](docs/DEVELOPMENT_ROADMAP.md).
 - [Arquitetura](docs/ARCHITECTURE.md), [projeto técnico](docs/TDD.md) e [motor voxel](docs/VOXEL_SYSTEM.md).
 - [Contrato do LIS](docs/LIS_INTEGRATION.md), [convenções](docs/CODING_STANDARDS.md) e [decisões](docs/DECISIONS.md).
+
+![Spawn: Marco 01 à esquerda, Marco 02 à direita](docs/images/marco02-spawn-antes-depois.jpg)
+
+![Vista do horizonte no Marco 02](docs/images/marco02-vista-horizonte.jpg)

@@ -36,3 +36,45 @@ Os testes `Aethra.Voxel.Coordinates`, `Aethra.Voxel.Generation` e `Aethra.Voxel.
 ## Benchmark pendente
 
 Executar em Standalone a 1920 × 1080 no PC-alvo, com o preset F2, a mesma seed e uma rota repetível. Aquecer a cena por 20 s e gravar 60 s de percurso e edições com `csvprofile start` e `csvprofile stop`. Registrar FPS médio, frame time p95/p99, tempos de Game e GPU pelo `stat unit`, RAM, preset e resolução. A meta inicial de 60 FPS estáveis segue sem medição.
+
+## Marco 02 — Claude Code (19/11/2026)
+
+Branch `claude/marco-02-graficos`. Hardware: Ryzen 5 5500, RTX 3060 12 GB (driver 621.24), 16 GB, Windows 11, UE 5.8.4.
+
+### Build empacotada
+
+`Builds\Marco02\Windows\EcosDeAethra.exe` (Win64 Development). A build do Marco 01 em `Windows\` foi preservada. No UE 5.8.4 o processo de cook terminou com `LogCook: Display: Done!` e travou ao encerrar; o processo foi finalizado e o stage/pak/archive foi executado com `-skipcook` (UAT código 0).
+
+### Testes
+
+| Teste | Resultado |
+| --- | --- |
+| `Aethra.Voxel` (5 testes: Coordinates, Generation, Horizon, PersistAcrossRestart, SaveRoundTrip) | Aprovados no editor |
+| Persistência na build empacotada | Sessão 1 fez 30 edições pela rota; após fechar, a sessão 2 registrou `Loaded 30 voxel edits (revision 30) for seed 42819` e continuou gravando (save 9,2 → 12,5 KB) |
+| Saves do Marco 01 | Carregam sem aviso de save inválido e não são regravados ao abrir |
+| Movimento, salto, remoção de blocos, streaming e horizonte | Exercitados pela rota `-AethraBench` (passo fixo de 60 Hz) |
+| Colocação de bloco pelo mouse | Não exercitada na build; `SetBlock` de colocação coberto por `PersistAcrossRestart` |
+
+### Benchmark
+
+`Tools\Bench\bench.ps1`: 1920 × 1080 janela, VSync desligado, `-benchmark -fps=60`, rota fixa de 60 s após 5 s de aquecimento, uma remoção de bloco a cada 2 s. pXX = percentil XX do tempo de frame; 1% low = FPS médio do 1% de frames mais lentos.
+
+| Medição | FPS médio | p95 | p99 | 1% low | GPU médio | RAM |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base GPT (editor `-game`) | 283 | 4,4 ms | 7,2 ms | — | 2,2 ms | 2,3 GB* |
+| Marco 02 inicial (build empacotada) | 127 | 9,5 ms | 20,0 ms | — | 6,8 ms | 1,5 GB |
+| Marco 02 final (build empacotada) | 129 | 8,6 ms | 14,8 ms | 59 | 6,9 ms | 1,5 GB |
+
+\* O editor em `-game` inclui a memória do editor. VRAM local ~0,67 GB nas três medições.
+
+### Gargalo investigado
+
+Colunas próprias `Aethra/*` no csvprofile e `Tools\Bench\spikes.py` (compara o 1% de frames mais lentos com os frames típicos) mostraram que os picos vinham do cozimento síncrono de colisão: ~7 ms por chunk carregado e até ~60 ms por edição. O envio de malha do horizonte custava ~1,3 ms em média e não era a causa. Com colisão assíncrona, `ChunkUpload` caiu para 1,3 ms em média (máximo 5,8 ms). O pico restante (~10–14 ms na game thread) é a geração e a malha síncronas do chunk.
+
+### Pendências
+
+1. Gerar e montar a malha de chunks no thread pool, como já é feito no horizonte.
+2. Água sem fluxo: remover um bloco na margem não reabastece; sem reflexo de tela (SSR) em translúcidos.
+3. Horizonte ignora edições do jogador e não tem transição suave (popping) entre passos de LOD.
+4. Cook do UE 5.8.4 trava ao sair após `Done!`; investigar ou usar o watchdog descrito no HANDOFF.
+5. Teste manual de colocação de bloco com o mouse na build empacotada.

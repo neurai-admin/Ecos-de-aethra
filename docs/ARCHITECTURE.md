@@ -10,6 +10,7 @@
 | Controles, câmera e interação | `AAethraCharacter` |
 | Feedback imediato | `AAethraHUD` |
 | Horizonte distante (LOD em blocos além do raio voxel) | `AAethraHorizon` |
+| Medição: colunas `Aethra/*` no csvprofile | `AethraStats.h` |
 | Cor por tipo de bloco, compartilhada por chunk e horizonte | `AethraBlockColor.h` |
 | Materiais procedurais (gerados por script) | `Tools/Editor/create_voxel_material.py` |
 
