@@ -65,7 +65,7 @@ AAethraHorizon::FMeshData AAethraHorizon::BuildTile(int32 Seed, FIntPoint Tile, 
         {
             GenerateColumn(Base + FIntPoint(I, J) * Step, Seed, Column);
             int32 Top = Height - 1;
-            while (Top >= 0 && Column[Top] == EAethraBlock::Air)
+            while (Top >= 0 && !IsOpaque(Column[Top])) // plants are too small for the horizon
             {
                 --Top;
             }

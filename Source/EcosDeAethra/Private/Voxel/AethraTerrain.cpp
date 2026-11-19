@@ -49,6 +49,13 @@ namespace
         return Point.SizeSquared() > 16 && Ground >= 21 && Ground <= 44
             && Hash(Patch, Seed, 0x2A71) % 100 < 57;
     }
+
+    // Pines take the patches the original trees leave empty, preferring higher ground.
+    bool IsPine(FIntPoint Point, FIntPoint Patch, int32 Ground, int32 Seed)
+    {
+        return Point.SizeSquared() > 16 && Ground >= 26 && Ground <= 50
+            && !IsTree(Point, Patch, Ground, Seed) && Hash(Patch, Seed, 0x51E7) % 100 < 55;
+    }
 }
 
 namespace AethraTerrain
@@ -89,7 +96,17 @@ namespace AethraTerrain
 
     bool IsKnownBlock(EAethraBlock Block)
     {
-        return static_cast<uint8>(Block) <= static_cast<uint8>(EAethraBlock::Leaves);
+        return static_cast<uint8>(Block) <= static_cast<uint8>(EAethraBlock::FlowerYellow);
+    }
+
+    bool IsPlant(EAethraBlock Block)
+    {
+        return Block >= EAethraBlock::TallGrass && Block <= EAethraBlock::FlowerYellow;
+    }
+
+    bool IsOpaque(EAethraBlock Block)
+    {
+        return Block != EAethraBlock::Air && !IsPlant(Block);
     }
 
     int32 SurfaceAt(FIntPoint Point, int32 Seed)
@@ -170,6 +187,60 @@ namespace AethraTerrain
             && Hash(Point, Seed, 0x8BC9) % 100 < 3)
         {
             Column[Surface + 1] = EAethraBlock::Leaves;
+        }
+
+        // Vegetation pass 2 (Marco 02): only fills cells the original pass left as Air, so existing
+        // worlds and saved edits keep their meaning.
+        for (int32 PY = MinPatchY; PY <= MaxPatchY; ++PY)
+        {
+            for (int32 PX = MinPatchX; PX <= MaxPatchX; ++PX)
+            {
+                const FIntPoint Patch(PX, PY);
+                const FIntPoint Tree = TreeAt(Patch, Seed);
+                const int32 Distance = FMath::Max(FMath::Abs(Point.X - Tree.X), FMath::Abs(Point.Y - Tree.Y));
+                if (Distance > CrownRadius || !Contains(FIntVector(Tree.X, Tree.Y, 0)))
+                {
+                    continue;
+                }
+                const int32 Ground = Tree == Point ? Surface : SurfaceAt(Tree, Seed);
+                if (!IsPine(Tree, Patch, Ground, Seed))
+                {
+                    continue;
+                }
+                const int32 Radius = FMath::Abs(Point.X - Tree.X) + FMath::Abs(Point.Y - Tree.Y); // conical crown
+                // Crown radius per height above ground: tiered diamond tapering to a single tip.
+                static constexpr int32 CrownByOffset[] = { -1, -1, -1, 2, 1, 2, 1, 1, 0 };
+                for (int32 Offset = 1; Offset < UE_ARRAY_COUNT(CrownByOffset); ++Offset)
+                {
+                    const int32 Z = Ground + Offset;
+                    if (Z <= Surface || Z >= Height || Column[Z] != EAethraBlock::Air)
+                    {
+                        continue;
+                    }
+                    if (Distance == 0 && Offset <= 7)
+                    {
+                        Column[Z] = EAethraBlock::Wood;
+                    }
+                    else if (Radius <= CrownByOffset[Offset])
+                    {
+                        Column[Z] = EAethraBlock::PineLeaves;
+                    }
+                }
+            }
+        }
+
+        if (!bSandy && Point.SizeSquared() > 16 && Surface + 1 < Height && Column[Surface] == EAethraBlock::Grass
+            && Column[Surface + 1] == EAethraBlock::Air)
+        {
+            const uint32 Roll = Hash(Point, Seed, 0x6F1D) % 1000;
+            if (Roll < 30)
+            {
+                Column[Surface + 1] = Roll % 2 ? EAethraBlock::FlowerRed : EAethraBlock::FlowerYellow;
+            }
+            else if (Roll < 230)
+            {
+                Column[Surface + 1] = EAethraBlock::TallGrass;
+            }
         }
     }
 

@@ -24,7 +24,7 @@ bool FAethraVoxelHorizon::RunTest(const FString& Parameters)
     TStaticArray<EAethraBlock, Height> Column;
     GenerateColumn(Base, Seed, Column);
     int32 Top = Height - 1;
-    while (Top > 0 && Column[Top] == EAethraBlock::Air)
+    while (Top > 0 && !IsOpaque(Column[Top]))
     {
         --Top;
     }

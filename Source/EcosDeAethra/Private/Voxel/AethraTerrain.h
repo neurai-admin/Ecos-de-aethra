@@ -18,6 +18,9 @@ namespace AethraTerrain
     int32 Index(const FIntVector& Local);
     bool Contains(const FIntVector& Cell);
     bool IsKnownBlock(EAethraBlock Block);
+    // Plants are cross-shaped, non-colliding and do not hide neighbouring faces.
+    bool IsPlant(EAethraBlock Block);
+    bool IsOpaque(EAethraBlock Block);
     int32 SurfaceAt(FIntPoint Point, int32 Seed);
     void GenerateColumn(FIntPoint Point, int32 Seed, TStaticArray<EAethraBlock, Height>& Column);
     void GenerateChunk(FIntPoint Chunk, int32 Seed, TArray<EAethraBlock>& Blocks);

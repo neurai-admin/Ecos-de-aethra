@@ -48,6 +48,13 @@ AAethraVoxelChunk::AAethraVoxelChunk()
     {
         Mesh->SetMaterial(0, Material);
     }
+    // Section 1: cross-shaped plants, masked and two-sided (same generator script).
+    static ConstructorHelpers::FObjectFinderOptional<UMaterialInterface> Plant(
+        TEXT("/Game/Materials/M_AethraPlant.M_AethraPlant"));
+    if (UMaterialInterface* Material = Plant.Get() ? Plant.Get() : Fallback.Get())
+    {
+        Mesh->SetMaterial(1, Material);
+    }
 }
 
 void AAethraVoxelChunk::Initialize(AAethraVoxelWorld& World, FIntPoint Coordinate)
@@ -118,7 +125,7 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
         {
             Block = Corners[((P.X < 0 ? 0 : 1) + (P.Y < 0 ? 0 : 2)) * Height + P.Z];
         }
-        return Block != EAethraBlock::Air;
+        return IsOpaque(Block);
     };
 
     // Per-vertex ambient occlusion, 0 (enclosed) to 3 (open).
@@ -134,6 +141,38 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
     TArray<int32> Triangles;
     TArray<FVector2D> UV;
     TArray<FLinearColor> Colors;
+
+    TArray<FVector> PlantVertices, PlantNormals;
+    TArray<int32> PlantTriangles;
+    TArray<FVector2D> PlantUV;
+    TArray<FLinearColor> PlantColors;
+    // Two diagonal quads; the plant material is two-sided. Vertex alpha tells grass (1) from flowers (0.5).
+    const auto AddPlant = [&](const FIntVector& Local, EAethraBlock Block)
+    {
+        const FIntVector Cell = Origin + Local;
+        FLinearColor Color = AethraBlockColor(Block, Cell, FIntVector(0, 0, 1));
+        Color.A = Block == EAethraBlock::TallGrass ? 1.0f : 0.5f;
+        const double Tall = (Block == EAethraBlock::TallGrass ? 0.9 : 0.75) * CellSizeCm;
+        const FVector Base = FVector(Local) * CellSizeCm;
+        const FVector Diagonals[2][2] = {
+            { FVector(0.15, 0.15, 0), FVector(0.85, 0.85, 0) },
+            { FVector(0.15, 0.85, 0), FVector(0.85, 0.15, 0) }
+        };
+        for (const auto& Diagonal : Diagonals)
+        {
+            const FVector A = Base + Diagonal[0] * CellSizeCm;
+            const FVector B = Base + Diagonal[1] * CellSizeCm;
+            const int32 Start = PlantVertices.Num();
+            PlantVertices.Append({ A, B, B + FVector(0, 0, Tall), A + FVector(0, 0, Tall) });
+            PlantUV.Append({ {0, 0}, {1, 0}, {1, 1}, {0, 1} }); // V = 0 at the ground; M_AethraPlant flips it
+            PlantTriangles.Append({ Start, Start + 2, Start + 1, Start, Start + 3, Start + 2 });
+            for (int32 Vertex = 0; Vertex < 4; ++Vertex)
+            {
+                PlantNormals.Add(FVector::UpVector); // shade like the ground below
+                PlantColors.Add(Color);
+            }
+        }
+    };
     for (int32 Z = 0; Z < Height; ++Z)
     {
         for (int32 Y = 0; Y < ChunkSize; ++Y)
@@ -144,6 +183,11 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
                 const EAethraBlock Block = Blocks[Index(Local)];
                 if (Block == EAethraBlock::Air)
                 {
+                    continue;
+                }
+                if (IsPlant(Block))
+                {
+                    AddPlant(Local, Block);
                     continue;
                 }
 
@@ -162,7 +206,7 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
                         const EAethraBlock Adjacent = bOutside
                             ? Border[(Side * ChunkSize + EdgeOffset) * Height + Z]
                             : Blocks[Index(Neighbor)];
-                        if (Adjacent != EAethraBlock::Air)
+                        if (IsOpaque(Adjacent))
                         {
                             continue;
                         }
@@ -209,4 +253,13 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
     }
 
     Mesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV, Colors, {}, true, false);
+    if (PlantVertices.IsEmpty())
+    {
+        Mesh->ClearMeshSection(1);
+    }
+    else
+    {
+        Mesh->CreateMeshSection_LinearColor(1, PlantVertices, PlantTriangles, PlantNormals, PlantUV, PlantColors,
+            {}, false, false);
+    }
 }

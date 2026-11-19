@@ -207,6 +207,13 @@ void AAethraCharacter::EditBlock(bool bPlace)
         if (!Terrain->SetBlock(Target, EAethraBlock::Air))
         {
             ShowEditFailureUntil = GetWorld()->GetTimeSeconds() + 1.5;
+            return;
+        }
+        // A plant cannot float once its ground is gone.
+        const FIntVector Above = Target + FIntVector(0, 0, 1);
+        if (AethraTerrain::IsPlant(Terrain->GetBlock(Above)))
+        {
+            Terrain->SetBlock(Above, EAethraBlock::Air);
         }
         return;
     }
@@ -226,7 +233,8 @@ void AAethraCharacter::EditBlock(bool bPlace)
         Face = FIntVector(0, 0, Normal.Z >= 0 ? 1 : -1);
     }
     const FIntVector Destination = Target + Face;
-    if (Terrain->GetBlock(Destination) != EAethraBlock::Air)
+    const EAethraBlock Occupant = Terrain->GetBlock(Destination);
+    if (Occupant != EAethraBlock::Air && !AethraTerrain::IsPlant(Occupant)) // blocks replace plants
     {
         return;
     }

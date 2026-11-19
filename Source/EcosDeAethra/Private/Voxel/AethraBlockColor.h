@@ -14,6 +14,10 @@ inline FLinearColor AethraBlockColor(EAethraBlock Block, const FIntVector& Cell,
     case EAethraBlock::Sand: Tint = FColor(204, 172, 110); break;
     case EAethraBlock::Wood: Tint = Normal.Z == 0 ? FColor(104, 69, 39) : FColor(153, 110, 61); break;
     case EAethraBlock::Leaves: Tint = FColor(63, 119, 57); break;
+    case EAethraBlock::PineLeaves: Tint = FColor(36, 88, 58); break;
+    case EAethraBlock::TallGrass: Tint = FColor(122, 168, 58); break;
+    case EAethraBlock::FlowerRed: Tint = FColor(206, 54, 48); break;
+    case EAethraBlock::FlowerYellow: Tint = FColor(236, 202, 64); break;
     default: Tint = FColor::White; break;
     }
 
