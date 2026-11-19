@@ -12,6 +12,8 @@ Worktree independente baseada em `b0e4cc7`, Unreal Engine 5.8.4 (CL 58902052), R
 | Build em Windows | Win64 Development arquivada em `Builds/Marco02Correcoes/Windows`. As capturas foram produzidas pelo executável empacotado fora do editor. A rota exercitou movimento, salto e edição com saves de teste próprios. |
 | Visual | As capturas equivalentes dos dois pacotes mostram água, vegetação, céu, sombras e horizonte. A correção preserva os materiais e a direção artística. |
 
+Os dois pacotes encerraram normalmente após a rota automatizada e escreveram os dois slots de edição da seed 42819. Os testes manuais de clique esquerdo e direito, bloqueio de colocação na cápsula e reinício com saves do Marco 01 aguardam o fechamento do aviso de firewall do Windows. As cópias dos saves do Marco 01 foram preparadas em diretório isolado. A execução gráfica e a tentativa com NullRHI diretamente pelo sandbox falharam durante a inicialização da engine, antes de validar esses casos.
+
 ### Cook e procedência do pacote
 
 A primeira tentativa terminou antes do cook com MSVC C3859/C1076 e erro 1455 de memória virtual no executor XGE. A execução seguinte usou o executor local, com configuração de memória da worktree, e compilou o alvo de jogo. O UAT iniciou um cook completo com Zen em uma worktree sem cook prévio. Processou 507 pacotes, pulou zero incrementalmente e 7 por plataforma. O `UnrealEditor-Cmd.exe` encerrou com código 0, cerca de três segundos após `LogCook: Display: Done!`. Stage e archive terminaram, e o UAT saiu com código 0. A falha de encerramento original não se repetiu nessa execução e sua causa permanece indeterminada.
