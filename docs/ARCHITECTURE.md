@@ -9,9 +9,14 @@
 | Inicialização e ponto de entrada da cena | `AAethraGameMode` |
 | Controles, câmera e interação | `AAethraCharacter` |
 | Feedback imediato | `AAethraHUD` |
+| Horizonte distante (LOD em blocos além do raio voxel) | `AAethraHorizon` |
+| Cor por tipo de bloco, compartilhada por chunk e horizonte | `AethraBlockColor.h` |
+| Materiais procedurais (gerados por script) | `Tools/Editor/create_voxel_material.py` |
 
 O gerador calcula blocos a partir de seed e coordenadas globais. O mundo aplica as edições persistentes ao gerar cada chunk. Para construir uma malha, o chunk consulta uma coluna de borda por linha em cada vizinho e usa as mesmas regras do terreno local. As consultas também funcionam para células de chunks descarregados.
 
 Uma edição valida a coordenada, grava a revisão, atualiza a malha e comunica o evento. A edição é revertida em memória se a gravação falhar. Cada chunk tem um componente de malha e colisão.
+
+O horizonte é derivado apenas da seed: tiles de 128 × 128 células são gerados no thread pool e enviados à GPU no máximo dois por frame. Ele não lê edições nem o save, e não tem colisão; `AAethraVoxelWorld` o cria e informa o centro e o raio a cada frame.
 
 O protótipo executa essas operações na thread de jogo. O futuro módulo LIS pode consumir o contrato público sem depender das classes privadas de malha ou do formato de salvamento de terreno. A divisão de trabalho e o contrato estão em [LIS_INTEGRATION.md](LIS_INTEGRATION.md).

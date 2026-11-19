@@ -22,8 +22,17 @@ O pacote Win64 Development gerado no PC abre por `D:\ECOS_DE_AETHRA\Windows\Ecos
 | Clique direito | Colocar um bloco na face que está sob a mira |
 | 1, 2, 3, 4 | Selecionar grama, terra, pedra ou areia |
 | F1, F2, F3 | Selecionar distância e qualidade gráfica |
+| Console `aethra.Horizon 0/1` | Desligar ou ligar o horizonte distante |
 
-O código inclui vale e colinas, árvores e arbustos, câmera em primeira pessoa, blocos editáveis e salvamento das alterações por seed. O alvo de editor compilou na Unreal Engine 5.8.4 e os testes de automação passaram. Consulte o [relatório de testes](docs/TEST_REPORT.md).
+Benchmark repetível a 1080p (rota fixa, captura CSV e screenshots em `Saved/Bench/<nome>`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File Tools\Benchench.ps1 -Name minha-medicao -Seconds 60
+```
+
+Os materiais `M_AethraVoxel` e `M_AethraPlant` são gerados por `Tools/Editor/create_voxel_material.py`. Consulte a [passagem de trabalho](docs/HANDOFF.md) antes de continuar o desenvolvimento.
+
+O código inclui vale e colinas, árvores, pinheiros, arbustos, capim e flores, horizonte distante com LOD, iluminação atmosférica, câmera em primeira pessoa, blocos editáveis e salvamento das alterações por seed. O alvo de editor compilou na Unreal Engine 5.8.4 e os testes de automação passaram. Consulte o [relatório de testes](docs/TEST_REPORT.md).
 
 - [Visão do jogo](docs/GDD.md) e [roteiro](docs/DEVELOPMENT_ROADMAP.md).
 - [Arquitetura](docs/ARCHITECTURE.md), [projeto técnico](docs/TDD.md) e [motor voxel](docs/VOXEL_SYSTEM.md).
