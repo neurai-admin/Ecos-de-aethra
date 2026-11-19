@@ -5,6 +5,7 @@
 #include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Voxel/AethraBlockColor.h"
+#include "Voxel/AethraStats.h"
 #include "Voxel/AethraTerrain.h"
 
 using namespace AethraTerrain;
@@ -12,7 +13,7 @@ using namespace AethraTerrain;
 namespace
 {
     constexpr int32 MaxJobs = 6;
-    constexpr int32 MaxAppliesPerFrame = 2;
+    constexpr int32 MaxAppliesPerFrame = 1; // a step-2 tile upload costs up to ~5 ms
     constexpr int32 TileSkirtCells = 8; // hides cracks between LOD steps of neighbouring tiles
 
     int32 RingOf(FIntPoint Offset)
@@ -150,6 +151,7 @@ AAethraHorizon::FMeshData AAethraHorizon::BuildTile(int32 Seed, FIntPoint Tile, 
 
 void AAethraHorizon::Update(int32 Seed, FIntPoint CenterChunk, int32 NearRadius)
 {
+    CSV_SCOPED_TIMING_STAT(Aethra, HorizonUpdate);
     constexpr int32 ChunksPerTile = TileCells / ChunkSize;
     const FIntPoint CenterTile(FloorDiv(CenterChunk.X, ChunksPerTile), FloorDiv(CenterChunk.Y, ChunksPerTile));
     const FIntRect Near((CenterChunk - FIntPoint(NearRadius)) * ChunkSize,
@@ -230,6 +232,7 @@ void AAethraHorizon::Update(int32 Seed, FIntPoint CenterChunk, int32 NearRadius)
 
 void AAethraHorizon::Apply(FIntPoint Tile, FMeshData&& Data)
 {
+    CSV_SCOPED_TIMING_STAT(Aethra, HorizonUpload);
     TObjectPtr<UProceduralMeshComponent>& Mesh = Meshes.FindOrAdd(Tile);
     if (!Mesh)
     {

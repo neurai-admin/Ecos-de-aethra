@@ -8,8 +8,10 @@ param(
     [int]$Seconds = 60,
     [string]$Extra = '',
     [string]$Exe = 'D:\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe',
-    [string]$Project = (Resolve-Path "$PSScriptRoot\..\..\EcosDeAethra.uproject").Path
+    [string]$Project = ''
 )
+# PowerShell 5.1 evaluates param defaults before $PSScriptRoot is set.
+if (-not $Project) { $Project = (Resolve-Path (Join-Path $PSScriptRoot '..\..\EcosDeAethra.uproject')).Path }
 $out = Join-Path (Split-Path $Project) "Saved\Bench\$Name"
 if (Test-Path $out) { Remove-Item -Recurse -Force $out }
 New-Item -ItemType Directory $out | Out-Null

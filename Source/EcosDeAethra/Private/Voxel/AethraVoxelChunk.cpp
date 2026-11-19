@@ -5,6 +5,7 @@
 #include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Voxel/AethraBlockColor.h"
+#include "Voxel/AethraStats.h"
 #include "Voxel/AethraTerrain.h"
 
 using namespace AethraTerrain;
@@ -57,12 +58,16 @@ AAethraVoxelChunk::AAethraVoxelChunk()
     }
 }
 
-void AAethraVoxelChunk::Initialize(AAethraVoxelWorld& World, FIntPoint Coordinate)
+void AAethraVoxelChunk::Initialize(AAethraVoxelWorld& World, FIntPoint Coordinate, bool bAsyncCollision)
 {
+    CSV_SCOPED_TIMING_STAT(Aethra, ChunkLoad);
     Chunk = Coordinate;
     GenerateChunk(Chunk, World.Seed, Blocks);
     World.ApplyChunkEdits(Chunk, Blocks);
+    // Synchronous cooking was ~7 ms per streamed chunk (Marco 02 profile); edits stay synchronous.
+    Mesh->bUseAsyncCooking = bAsyncCollision;
     Rebuild(World);
+    Mesh->bUseAsyncCooking = false;
 }
 
 void AAethraVoxelChunk::SetBlock(int32 BlockIndex, EAethraBlock Block)
@@ -72,6 +77,7 @@ void AAethraVoxelChunk::SetBlock(int32 BlockIndex, EAethraBlock Block)
 
 void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
 {
+    CSV_SCOPED_TIMING_STAT(Aethra, ChunkMesh);
     const FIntVector Origin = ChunkOrigin(Chunk);
     TStaticArray<EAethraBlock, 4 * ChunkSize * Height> Border;
     for (int32 Offset = 0; Offset < ChunkSize; ++Offset)
@@ -252,6 +258,7 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
         }
     }
 
+    CSV_SCOPED_TIMING_STAT(Aethra, ChunkUpload);
     Mesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV, Colors, {}, true, false);
     if (PlantVertices.IsEmpty())
     {

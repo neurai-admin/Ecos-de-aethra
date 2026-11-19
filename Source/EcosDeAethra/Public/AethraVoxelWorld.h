@@ -59,5 +59,5 @@ private:
     void LoadEdits();
     void ApplyChunkEdits(FIntPoint Chunk, TArray<EAethraBlock>& Blocks) const;
     void ApplyColumnEdits(FIntPoint Point, TArrayView<EAethraBlock> Column) const;
-    void LoadChunk(FIntPoint Chunk);
+    void LoadChunk(FIntPoint Chunk, bool bAsyncCollision = true);
 };

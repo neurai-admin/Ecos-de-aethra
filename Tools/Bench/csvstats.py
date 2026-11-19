@@ -33,3 +33,7 @@ for name in ('GameThreadTime', 'RenderThreadTime', 'RHIThreadTime', 'GPUTime', '
     values = col(name)
     if values:
         print(f"  {name}: avg={st.mean(values):.2f} p95={pct(values, .95):.2f} max={values[-1]:.2f}")
+for name in sorted(k for k in rows[0] if k and k.startswith('Aethra/')):
+    active = [x for x in col(name) if x > 0]
+    if active:
+        print(f"  {name}: frames={len(active)} avg={st.mean(active):.2f}ms p95={pct(active, .95):.2f} max={active[-1]:.2f}")
