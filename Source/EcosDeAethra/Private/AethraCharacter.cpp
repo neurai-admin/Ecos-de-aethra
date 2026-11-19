@@ -42,15 +42,38 @@ void AAethraCharacter::Tick(float DeltaSeconds)
     }
 
     // Same seed + same inputs = repeatable route; 5 s warm-up fills the streaming radius first.
+    // Use with -benchmark -fps=60 for a fixed timestep. Screenshots stay outside the CSV capture.
     constexpr float WarmUp = 5.0f;
     BenchElapsed += DeltaSeconds;
-    PC->SetControlRotation(FRotator(-30.0f, 70.0f + 35.0f * FMath::Sin(BenchElapsed * 0.25f), 0.0f));
-    AddMovementInput(GetActorForwardVector(), 1.0f);
-    if (CanJump())
-    {
-        Jump();
-    }
     const float End = WarmUp + BenchSeconds;
+    const auto Crossed = [this, DeltaSeconds](float Time)
+    {
+        return BenchElapsed - DeltaSeconds < Time && BenchElapsed >= Time;
+    };
+    const float Yaw = 70.0f + 35.0f * FMath::Sin(FMath::Min(BenchElapsed, End) * 0.25f);
+    if (BenchElapsed < End)
+    {
+        PC->SetControlRotation(FRotator(-30.0f, Yaw, 0.0f));
+        AddMovementInput(GetActorForwardVector(), 1.0f);
+        if (CanJump())
+        {
+            Jump();
+        }
+    }
+    else
+    {
+        if (Crossed(End))
+        {
+            // Vista point above the route end, so the horizon screenshot never faces a wall.
+            GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+            SetActorLocation(GetActorLocation() + FVector(0.0, 0.0, 2500.0));
+        }
+        PC->SetControlRotation(FRotator(-8.0f, Yaw, 0.0f));
+    }
+    if (Crossed(WarmUp - 0.5f) || Crossed(End + 0.5f))
+    {
+        PC->ConsoleCommand(TEXT("HighResShot 1"));
+    }
     if (!bBenchCapturing && BenchElapsed >= WarmUp && BenchElapsed < End)
     {
         bBenchCapturing = true;
@@ -67,7 +90,7 @@ void AAethraCharacter::Tick(float DeltaSeconds)
         bBenchCapturing = false;
         PC->ConsoleCommand(TEXT("csvprofile stop"));
     }
-    if (BenchElapsed >= End + 1.0f) // give the CSV writer a second to flush
+    if (BenchElapsed >= End + 1.5f) // CSV flush and the final screenshot
     {
         PC->ConsoleCommand(TEXT("quit"));
     }
