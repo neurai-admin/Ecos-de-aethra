@@ -25,6 +25,54 @@ AAethraCharacter::AAethraCharacter()
     bUseControllerRotationYaw = true;
 }
 
+void AAethraCharacter::BeginPlay()
+{
+    Super::BeginPlay();
+    FParse::Value(FCommandLine::Get(), TEXT("AethraBench="), BenchSeconds);
+    SetActorTickEnabled(BenchSeconds > 0.0f);
+}
+
+void AAethraCharacter::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    APlayerController* PC = Cast<APlayerController>(GetController());
+    if (BenchSeconds <= 0.0f || !PC)
+    {
+        return;
+    }
+
+    // Same seed + same inputs = repeatable route; 5 s warm-up fills the streaming radius first.
+    constexpr float WarmUp = 5.0f;
+    BenchElapsed += DeltaSeconds;
+    PC->SetControlRotation(FRotator(-30.0f, 70.0f + 35.0f * FMath::Sin(BenchElapsed * 0.25f), 0.0f));
+    AddMovementInput(GetActorForwardVector(), 1.0f);
+    if (CanJump())
+    {
+        Jump();
+    }
+    const float End = WarmUp + BenchSeconds;
+    if (!bBenchCapturing && BenchElapsed >= WarmUp && BenchElapsed < End)
+    {
+        bBenchCapturing = true;
+        NextBenchEdit = BenchElapsed;
+        PC->ConsoleCommand(TEXT("csvprofile start"));
+    }
+    if (bBenchCapturing && BenchElapsed >= NextBenchEdit)
+    {
+        NextBenchEdit += 2.0f;
+        EditBlock(false);
+    }
+    if (bBenchCapturing && BenchElapsed >= End)
+    {
+        bBenchCapturing = false;
+        PC->ConsoleCommand(TEXT("csvprofile stop"));
+    }
+    if (BenchElapsed >= End + 1.0f) // give the CSV writer a second to flush
+    {
+        PC->ConsoleCommand(TEXT("quit"));
+    }
+}
+
 void AAethraCharacter::SetupPlayerInputComponent(UInputComponent* Input)
 {
     Super::SetupPlayerInputComponent(Input);

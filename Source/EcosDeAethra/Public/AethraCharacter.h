@@ -13,6 +13,8 @@ class ECOSDEAETHRA_API AAethraCharacter : public ACharacter
 
 public:
     AAethraCharacter();
+    virtual void BeginPlay() override;
+    virtual void Tick(float DeltaSeconds) override;
     virtual void SetupPlayerInputComponent(UInputComponent* Input) override;
 
     EAethraBlock GetSelectedBlock() const { return SelectedBlock; }
@@ -24,6 +26,12 @@ private:
 
     EAethraBlock SelectedBlock = EAethraBlock::Grass;
     double ShowEditFailureUntil = -1.0;
+
+    // Benchmark route (-AethraBench=<seconds>): fixed inputs, CSV capture, then quit.
+    float BenchSeconds = 0.0f;
+    float BenchElapsed = 0.0f;
+    float NextBenchEdit = 0.0f;
+    bool bBenchCapturing = false;
 
     void MoveForward(float Value);
     void MoveRight(float Value);
