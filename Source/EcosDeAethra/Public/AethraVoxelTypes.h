@@ -17,7 +17,11 @@ enum class EAethraBlock : uint8
     PineLeaves,
     TallGrass,
     FlowerRed,
-    FlowerYellow
+    FlowerYellow,
+    Snow,
+    Water,
+    BirchWood,
+    BirchLeaves
 };
 
 USTRUCT(BlueprintType)

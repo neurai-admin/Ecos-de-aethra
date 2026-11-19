@@ -14,7 +14,7 @@ class AAethraVoxelChunk : public AActor
 
 public:
     AAethraVoxelChunk();
-    // bAsyncCollision: cook collision off the game thread (streamed chunks away from the player).
+    // bAsyncCollision = false only for the chunk the player spawns on this frame.
     void Initialize(AAethraVoxelWorld& World, FIntPoint Coordinate, bool bAsyncCollision = false);
     void Rebuild(const AAethraVoxelWorld& World);
     void SetBlock(int32 Index, EAethraBlock Block);

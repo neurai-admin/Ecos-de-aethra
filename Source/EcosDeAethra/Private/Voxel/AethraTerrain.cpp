@@ -50,11 +50,42 @@ namespace
             && Hash(Patch, Seed, 0x2A71) % 100 < 57;
     }
 
-    // Pines take the patches the original trees leave empty, preferring higher ground.
+    // Pines take the patches the original trees leave empty, preferring higher ground up to the tree line.
     bool IsPine(FIntPoint Point, FIntPoint Patch, int32 Ground, int32 Seed)
     {
-        return Point.SizeSquared() > 16 && Ground >= 26 && Ground <= 50
+        return Point.SizeSquared() > 16 && Ground >= 26 && Ground <= 68
             && !IsTree(Point, Patch, Ground, Seed) && Hash(Patch, Seed, 0x51E7) % 100 < 55;
+    }
+
+    // Birches fill most of what is left, so forests read dense.
+    bool IsBirch(FIntPoint Point, FIntPoint Patch, int32 Ground, int32 Seed)
+    {
+        return Point.SizeSquared() > 16 && Ground >= 21 && Ground <= 60 && !IsTree(Point, Patch, Ground, Seed)
+            && !IsPine(Point, Patch, Ground, Seed) && Hash(Patch, Seed, 0x1B4D) % 100 < 70;
+    }
+
+    constexpr int32 RockLine = 72;
+    constexpr int32 SnowLine = 92;
+
+    // Mountains rise only beyond ~256 cells from the origin, so the explored valley and its saved
+    // edits keep the Marco 01 terrain; 0 inside that radius.
+    int32 MountainAt(FIntPoint Point, int32 Seed)
+    {
+        constexpr int64 Inner = 256 * 256;
+        constexpr int64 Outer = 512 * 512;
+        const int64 Distance2 = int64(Point.X) * Point.X + int64(Point.Y) * Point.Y;
+        if (Distance2 <= Inner)
+        {
+            return 0;
+        }
+        const int32 Weight = Distance2 >= Outer ? 1024 : int32((Distance2 - Inner) * 1024 / (Outer - Inner));
+        const int32 Massif = Noise(Point, Seed, 128, 56, 0x7A11) + 22;
+        if (Massif <= 0)
+        {
+            return 0;
+        }
+        const int32 Ridge = 26 - FMath::Abs(Noise(Point, Seed, 40, 26, 0x4C3B)); // sharp crests
+        return (Massif + Ridge * Massif / 78) * Weight / 1024;
     }
 }
 
@@ -96,7 +127,7 @@ namespace AethraTerrain
 
     bool IsKnownBlock(EAethraBlock Block)
     {
-        return static_cast<uint8>(Block) <= static_cast<uint8>(EAethraBlock::FlowerYellow);
+        return static_cast<uint8>(Block) <= static_cast<uint8>(EAethraBlock::BirchLeaves);
     }
 
     bool IsPlant(EAethraBlock Block)
@@ -104,9 +135,24 @@ namespace AethraTerrain
         return Block >= EAethraBlock::TallGrass && Block <= EAethraBlock::FlowerYellow;
     }
 
+    bool IsLeaves(EAethraBlock Block)
+    {
+        return Block == EAethraBlock::Leaves || Block == EAethraBlock::PineLeaves || Block == EAethraBlock::BirchLeaves;
+    }
+
     bool IsOpaque(EAethraBlock Block)
     {
+        return Block != EAethraBlock::Air && Block != EAethraBlock::Water && !IsPlant(Block) && !IsLeaves(Block);
+    }
+
+    bool IsSurface(EAethraBlock Block)
+    {
         return Block != EAethraBlock::Air && !IsPlant(Block);
+    }
+
+    bool IsReplaceable(EAethraBlock Block)
+    {
+        return Block == EAethraBlock::Air || Block == EAethraBlock::Water || IsPlant(Block);
     }
 
     int32 SurfaceAt(FIntPoint Point, int32 Seed)
@@ -115,7 +161,8 @@ namespace AethraTerrain
         const int32 Rise = FMath::Min(FMath::Abs(Point.X - RiverX) / 2, 19);
         const int32 Hills = Noise(Point, Seed, 32, 11, 0x9DE1);
         const int32 Detail = Noise(Point, Seed, 9, 3, 0x319F);
-        return FMath::Clamp(21 + Rise + Hills + Detail, 8, 56);
+        // Near the origin the mountain term is 0 and the sum stays within the Marco 01 range (8..56).
+        return FMath::Clamp(21 + Rise + Hills + Detail + MountainAt(Point, Seed), 8, Height - 8);
     }
 
     void GenerateColumn(FIntPoint Point, int32 Seed, TStaticArray<EAethraBlock, Height>& Column)
@@ -134,6 +181,14 @@ namespace AethraTerrain
         for (int32 Z = 0; Z <= Surface; ++Z)
         {
             if (Z == 0 || Z < Surface - 3)
+            {
+                Column[Z] = EAethraBlock::Stone;
+            }
+            else if (Surface >= SnowLine + int32(Hash(Point, Seed, 0x5A0F) % 4))
+            {
+                Column[Z] = Z >= Surface - 1 ? EAethraBlock::Snow : EAethraBlock::Stone;
+            }
+            else if (Surface >= RockLine + int32(Hash(Point, Seed, 0x9C2B) % 5))
             {
                 Column[Z] = EAethraBlock::Stone;
             }
@@ -203,29 +258,66 @@ namespace AethraTerrain
                     continue;
                 }
                 const int32 Ground = Tree == Point ? Surface : SurfaceAt(Tree, Seed);
-                if (!IsPine(Tree, Patch, Ground, Seed))
+                const bool bPine = IsPine(Tree, Patch, Ground, Seed);
+                if (!bPine && !IsBirch(Tree, Patch, Ground, Seed))
                 {
                     continue;
                 }
-                const int32 Radius = FMath::Abs(Point.X - Tree.X) + FMath::Abs(Point.Y - Tree.Y); // conical crown
-                // Crown radius per height above ground: tiered diamond tapering to a single tip.
-                static constexpr int32 CrownByOffset[] = { -1, -1, -1, 2, 1, 2, 1, 1, 0 };
-                for (int32 Offset = 1; Offset < UE_ARRAY_COUNT(CrownByOffset); ++Offset)
+                const int32 DX = FMath::Abs(Point.X - Tree.X);
+                const int32 DY = FMath::Abs(Point.Y - Tree.Y);
+                const int32 Extra = int32(Hash(Patch, Seed, 0x3D07) % 3); // 0-2 cells taller
+                const auto Place = [&](int32 Z, EAethraBlock Block)
                 {
-                    const int32 Z = Ground + Offset;
-                    if (Z <= Surface || Z >= Height || Column[Z] != EAethraBlock::Air)
+                    if (Z > Surface && Z < Height && Column[Z] == EAethraBlock::Air)
                     {
-                        continue;
+                        Column[Z] = Block;
                     }
-                    if (Distance == 0 && Offset <= 7)
+                };
+                if (bPine)
+                {
+                    // Tiered diamond crown tapering to a single tip; Extra adds trunk below it.
+                    static constexpr int32 CrownByLayer[] = { 2, 1, 2, 1, 1, 0 };
+                    const int32 Radius = DX + DY;
+                    for (int32 Offset = 1; Offset <= 8 + Extra; ++Offset)
                     {
-                        Column[Z] = EAethraBlock::Wood;
-                    }
-                    else if (Radius <= CrownByOffset[Offset])
-                    {
-                        Column[Z] = EAethraBlock::PineLeaves;
+                        const int32 Layer = Offset - 3 - Extra;
+                        if (Distance == 0 && Offset <= 7 + Extra)
+                        {
+                            Place(Ground + Offset, EAethraBlock::Wood);
+                        }
+                        else if (Layer >= 0 && Radius <= CrownByLayer[Layer])
+                        {
+                            Place(Ground + Offset, EAethraBlock::PineLeaves);
+                        }
                     }
                 }
+                else
+                {
+                    // Birch: slim pale trunk and a rounded crown with trimmed corners.
+                    const int32 Trunk = 5 + Extra;
+                    static constexpr int32 CrownByLayer[] = { 2, 2, 1, 0 };
+                    for (int32 Offset = 1; Offset <= Trunk + 1; ++Offset)
+                    {
+                        const int32 Layer = Offset - (Trunk - 2);
+                        if (Distance == 0 && Offset <= Trunk)
+                        {
+                            Place(Ground + Offset, EAethraBlock::BirchWood);
+                        }
+                        else if (Layer >= 0 && Distance <= CrownByLayer[Layer] && !(DX == 2 && DY == 2))
+                        {
+                            Place(Ground + Offset, EAethraBlock::BirchLeaves);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Water fills low valley floors (never above sand, so no plants or trees end up submerged).
+        for (int32 Z = Surface + 1; Z <= WaterLevel; ++Z)
+        {
+            if (Column[Z] == EAethraBlock::Air)
+            {
+                Column[Z] = EAethraBlock::Water;
             }
         }
 
@@ -233,7 +325,11 @@ namespace AethraTerrain
             && Column[Surface + 1] == EAethraBlock::Air)
         {
             const uint32 Roll = Hash(Point, Seed, 0x6F1D) % 1000;
-            if (Roll < 30)
+            if (Roll >= 960)
+            {
+                Column[Surface + 1] = EAethraBlock::Leaves; // extra undergrowth bushes
+            }
+            else if (Roll < 30)
             {
                 Column[Surface + 1] = Roll % 2 ? EAethraBlock::FlowerRed : EAethraBlock::FlowerYellow;
             }

@@ -95,8 +95,8 @@ void AAethraGameMode::SpawnLighting()
         if (Light)
         {
             Light->SetMobility(EComponentMobility::Movable);
-            Light->SetIntensity(4.0f);
-            Light->SetLightColor(FLinearColor(1.0f, 0.92f, 0.78f));
+            Light->SetIntensity(3.6f);
+            Light->SetLightColor(FLinearColor(1.0f, 0.89f, 0.74f)); // warm late-morning sun
             Light->SetAtmosphereSunLight(true);
             // Natural-light pass: sun shafts through foliage and fog, soft cloud shadows.
             Light->bEnableLightShaftBloom = true;
@@ -116,7 +116,7 @@ void AAethraGameMode::SpawnLighting()
         {
             auto* Light = Sky->GetLightComponent();
             Light->SetMobility(EComponentMobility::Movable);
-            Light->SetIntensity(0.85f);
+            Light->SetIntensity(1.35f); // lifts shadowed faces toward a cool sky tint
             // Ambient follows the atmosphere colour instead of a static capture.
             Light->bRealTimeCapture = true;
             Light->SetLowerHemisphereColor(FLinearColor(0.10f, 0.09f, 0.07f));
@@ -129,10 +129,12 @@ void AAethraGameMode::SpawnLighting()
         if (auto* Fog = GetWorld()->SpawnActor<AExponentialHeightFog>(FVector(0, 0, 2000), FRotator::ZeroRotator))
         {
             UExponentialHeightFogComponent* Haze = Fog->GetComponent();
-            Haze->SetFogDensity(0.012f);
+            Haze->SetFogDensity(0.008f); // keeps the distant mountains readable
             Haze->SetFogHeightFalloff(0.08f);
             Haze->SetStartDistance(1500.0f);
             Haze->SetFogInscatteringColor(FLinearColor(0.42f, 0.52f, 0.66f));
+            Haze->SetDirectionalInscatteringColor(FLinearColor(0.55f, 0.45f, 0.30f)); // glow toward the sun
+            Haze->SetDirectionalInscatteringExponent(6.0f);
             Haze->SetVolumetricFog(true); // r.VolumetricFog / scalability decides whether it renders
             Haze->SetVolumetricFogScatteringDistribution(0.75f);
             Haze->SetVolumetricFogExtinctionScale(0.6f);
@@ -158,7 +160,8 @@ void AAethraGameMode::SpawnLighting()
             S.bOverride_AmbientOcclusionIntensity = true; S.AmbientOcclusionIntensity = 0.55f;
             S.bOverride_AmbientOcclusionRadius = true;    S.AmbientOcclusionRadius = 140.0f;
             S.bOverride_VignetteIntensity = true;         S.VignetteIntensity = 0.28f;
-            S.bOverride_ColorSaturation = true;           S.ColorSaturation = FVector4(1.06f, 1.06f, 1.06f, 1.0f);
+            S.bOverride_ColorSaturation = true;           S.ColorSaturation = FVector4(0.97f, 0.97f, 0.97f, 1.0f);
+            S.bOverride_ColorContrast = true;             S.ColorContrast = FVector4(1.06f, 1.06f, 1.06f, 1.0f);
             S.bOverride_WhiteTemp = true;                 S.WhiteTemp = 6150.0f;
         }
     }

@@ -16,7 +16,7 @@ class AAethraHorizon : public AActor
 
 public:
     static constexpr int32 TileCells = 128;
-    static constexpr int32 RadiusTiles = 8; // ~1 km of horizon around the player
+    static constexpr int32 RadiusTiles = 10; // ~1.3 km of horizon around the player
 
     struct FMeshData
     {
