@@ -1,0 +1,77 @@
+#include "LisVoxelAdapter.h"
+
+#include "LisSimulation.h"
+
+int32 FLisVoxelAdapter::Flush(FLisSimulation& Sim)
+{
+    if (!Classify)
+    {
+        UE_LOG(LogAethraLIS, Warning, TEXT("FLisVoxelAdapter::Flush called without a block classifier; %d changes dropped."), Pending.Num());
+        Ignored += Pending.Num();
+        Pending.Reset();
+        return 0;
+    }
+
+    struct FGroup
+    {
+        ELisPlace Place;
+        ELisEvent Type;
+        ELisVoxelResource Resource;
+        int32 Actor;
+        int32 Blocks;
+        FIntVector Cell;
+    };
+    TArray<FGroup> Groups;
+
+    for (const FLisVoxelChange& Change : Pending)
+    {
+        int32 Nearest = INDEX_NONE;
+        float NearestDistance = PlaceRadiusCells;
+        for (int32 P = 0; P < LisNum<ELisPlace>(); ++P)
+        {
+            const FIntVector Offset = Sim.World.Places[P].Cell - Change.Cell;
+            const float Distance = FVector(Offset.X, Offset.Y, 0.f).Size();
+            if (Distance <= NearestDistance)
+            {
+                NearestDistance = Distance;
+                Nearest = P;
+            }
+        }
+        const ELisVoxelResource Before = Classify(Change.Before);
+        const ELisVoxelResource After = Classify(Change.After);
+        const bool bRemoved = Before != ELisVoxelResource::None && Change.After == 0;
+        const bool bPlaced = Change.Before == 0 && Change.After != 0;
+        if (Nearest == INDEX_NONE || (!bRemoved && !bPlaced))
+        {
+            ++Ignored;
+            continue;
+        }
+        const ELisPlace Place = static_cast<ELisPlace>(Nearest);
+        const ELisEvent Type = bRemoved ? ELisEvent::ResourceRemoved : ELisEvent::BlockPlaced;
+        const ELisVoxelResource Resource = bRemoved ? Before : After;
+        FGroup* Group = Groups.FindByPredicate([&](const FGroup& G)
+        {
+            return G.Place == Place && G.Type == Type && G.Resource == Resource && G.Actor == Change.Actor;
+        });
+        if (!Group)
+        {
+            Group = &Groups.Add_GetRef({ Place, Type, Resource, Change.Actor, 0, Change.Cell });
+        }
+        ++Group->Blocks;
+    }
+    Pending.Reset();
+
+    for (const FGroup& G : Groups)
+    {
+        const float Units = G.Blocks / BlocksPerUnit;
+        FLisPlaceState& State = Sim.World.Place(G.Place);
+        const bool bStockResource = (G.Resource == ELisVoxelResource::Wood && G.Place == ELisPlace::Forest)
+            || (G.Resource == ELisVoxelResource::Crop && G.Place == ELisPlace::Fields);
+        if (G.Type == ELisEvent::ResourceRemoved && bStockResource)
+        {
+            State.Stock = FMath::Max(0.f, State.Stock - Units);
+        }
+        Sim.EmitAtCell(G.Type, G.Place, G.Actor, bStockResource ? Units : 0.f, G.Cell);
+    }
+    return Groups.Num();
+}
