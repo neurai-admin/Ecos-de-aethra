@@ -27,7 +27,7 @@ O pacote Win64 Development do Marco 01 abre por `D:\ECOS_DE_AETHRA\Windows\EcosD
 Benchmark repetível a 1080p (rota fixa, captura CSV e screenshots em `Saved/Bench/<nome>`):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File Tools\Benchench.ps1 -Name minha-medicao -Seconds 60
+powershell -ExecutionPolicy Bypass -File Tools\Bench\bench.ps1 -Name minha-medicao -Seconds 60
 ```
 
 Os materiais `M_AethraVoxel` e `M_AethraPlant` são gerados por `Tools/Editor/create_voxel_material.py`. Consulte a [passagem de trabalho](docs/HANDOFF.md) antes de continuar o desenvolvimento.
