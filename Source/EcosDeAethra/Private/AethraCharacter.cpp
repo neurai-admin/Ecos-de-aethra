@@ -60,9 +60,13 @@ void AAethraCharacter::Tick(float DeltaSeconds)
             Jump();
         }
     }
+    else if (BenchElapsed < End + 0.6f)
+    {
+        PC->SetControlRotation(FRotator(-2.0f, Yaw, 0.0f)); // eye-level view
+    }
     else
     {
-        if (Crossed(End))
+        if (Crossed(End + 0.6f))
         {
             // Vista point above the route end, so the horizon screenshot never faces a wall.
             GetCharacterMovement()->SetMovementMode(MOVE_Flying);
@@ -70,7 +74,7 @@ void AAethraCharacter::Tick(float DeltaSeconds)
         }
         PC->SetControlRotation(FRotator(-8.0f, Yaw, 0.0f));
     }
-    if (Crossed(WarmUp - 0.5f) || Crossed(End + 0.5f))
+    if (Crossed(WarmUp - 0.5f) || Crossed(End + 0.4f) || Crossed(End + 1.1f))
     {
         PC->ConsoleCommand(TEXT("HighResShot 1"));
     }
@@ -90,7 +94,7 @@ void AAethraCharacter::Tick(float DeltaSeconds)
         bBenchCapturing = false;
         PC->ConsoleCommand(TEXT("csvprofile stop"));
     }
-    if (BenchElapsed >= End + 1.5f) // CSV flush and the final screenshot
+    if (BenchElapsed >= End + 2.0f) // CSV flush and the final screenshots
     {
         PC->ConsoleCommand(TEXT("quit"));
     }
@@ -234,7 +238,7 @@ void AAethraCharacter::EditBlock(bool bPlace)
     }
     const FIntVector Destination = Target + Face;
     const EAethraBlock Occupant = Terrain->GetBlock(Destination);
-    if (Occupant != EAethraBlock::Air && !AethraTerrain::IsPlant(Occupant)) // blocks replace plants
+    if (!AethraTerrain::IsReplaceable(Occupant)) // blocks replace air, plants and water
     {
         return;
     }
