@@ -3,6 +3,7 @@
 #include "AethraCharacter.h"
 #include "AethraHUD.h"
 #include "AethraLisDirector.h"
+#include "AethraLisVillage.h"
 #include "AethraVoxelWorld.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyLightComponent.h"
@@ -38,6 +39,15 @@ AAethraVoxelWorld* AAethraGameMode::EnsureVoxelWorld()
 {
     if (!VoxelWorld)
     {
+        // LIS 03 demo: -AethraElden opens the Elden village demo world (its own seed, so its own voxel and
+        // LIS saves: the player's world is never touched); -AethraSeed=<n> picks any seed.
+        int32 Seed = 0;
+        bool bSeed = FParse::Value(FCommandLine::Get(), TEXT("AethraSeed="), Seed);
+        if (!bSeed && FParse::Param(FCommandLine::Get(), TEXT("AethraElden")))
+        {
+            Seed = FAethraLisVillage::DemoSeed;
+            bSeed = true;
+        }
         for (TActorIterator<AAethraVoxelWorld> It(GetWorld()); It; ++It)
         {
             VoxelWorld = *It;
@@ -45,7 +55,17 @@ AAethraVoxelWorld* AAethraGameMode::EnsureVoxelWorld()
         }
         if (!VoxelWorld)
         {
-            VoxelWorld = GetWorld()->SpawnActor<AAethraVoxelWorld>();
+            FActorSpawnParameters Params;
+            Params.bDeferConstruction = true;
+            VoxelWorld = GetWorld()->SpawnActor<AAethraVoxelWorld>(Params);
+            if (VoxelWorld)
+            {
+                VoxelWorld->FinishSpawning(FTransform::Identity);
+            }
+        }
+        if (VoxelWorld && bSeed)
+        {
+            VoxelWorld->Seed = Seed; // before the first block is read: the world initialises lazily
         }
     }
     return VoxelWorld.Get();
@@ -60,6 +80,8 @@ void AAethraGameMode::StartPlay()
     {
         if (auto* Director = GetWorld()->SpawnActor<AAethraLisDirector>())
         {
+            // -AethraElden: the isolated demo world, where the village may fell generated trees on its plots.
+            Director->bDemoVillage = FParse::Param(FCommandLine::Get(), TEXT("AethraElden"));
             Director->Start(VoxelWorld, FIntPoint(6, 20)); // just ahead of the spawn view
         }
     }
