@@ -4,10 +4,12 @@
   "Category": "Games",
   "Description": "Protótipo de mundo voxel de ECOS DE AETHRA",
   "Modules": [
-    { "Name": "EcosDeAethra", "Type": "Runtime", "LoadingPhase": "Default" }
+    { "Name": "EcosDeAethra", "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "AethraLIS", "Type": "Runtime", "LoadingPhase": "Default" }
   ],
   "Plugins": [
-    { "Name": "ProceduralMeshComponent", "Enabled": true }
+    { "Name": "ProceduralMeshComponent", "Enabled": true },
+    { "Name": "AndroidFileServer", "Enabled": false }
   ],
   "TargetPlatforms": ["Windows"]
 }

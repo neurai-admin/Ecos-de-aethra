@@ -1,5 +1,71 @@
 # Relatório de testes
 
+## Correções do Marco 02 — 19/11/2026
+
+Worktree independente baseada em `b0e4cc7`, Unreal Engine 5.8.4 (CL 58902052), Ryzen 5 5500, RTX 3060 e 16 GB de RAM. Os resultados históricos dos Marcos 01 e 02 estão nas seções abaixo.
+
+| Verificação | Resultado |
+| --- | --- |
+| Configuração AFS | O plug-in e a conexão de rede estão desabilitados. A primeira tentativa de desligar apenas no INI regenerou uma credencial ao abrir o editor. Com o plug-in desabilitado no descritor, o token não reapareceu após abrir, compilar e empacotar. O valor anterior está em 14 commits do histórico compartilhado. A validade residual depende de algum pacote Android de desenvolvimento que ainda o utilize. |
+| Saída do benchmark | PowerShell 5.1 e 7 passaram em 14 nomes inválidos, rejeição de arquivos no lugar de diretórios e preservação de resultados ao repetir o nome. A criação das duas junções NTFS foi negada pelo sandbox, de modo que esses dois casos foram pulados. |
+| Compilação e automação | Alvo de editor compilado. Seis testes `Aethra.Voxel` passaram, incluindo `ChunkSeams`, que testa faces nas divisas, mudança de oclusão em cantos positivos e negativos e reposição após descarregar e carregar chunks. |
+| Build em Windows | Win64 Development arquivada em `Builds/Marco02Correcoes/Windows`. As capturas foram produzidas pelo executável empacotado fora do editor. A rota exercitou movimento, salto e edição com saves de teste próprios. |
+| Visual | As capturas equivalentes dos dois pacotes mostram água, vegetação, céu, sombras e horizonte. A correção preserva os materiais e a direção artística. |
+
+Os dois pacotes encerraram normalmente após a rota automatizada e escreveram os dois slots de edição da seed 42819. Os testes manuais de clique esquerdo e direito, bloqueio de colocação na cápsula e reinício com saves do Marco 01 aguardam o fechamento do aviso de firewall do Windows. As cópias dos saves do Marco 01 foram preparadas em diretório isolado. A execução gráfica e a tentativa com NullRHI diretamente pelo sandbox falharam durante a inicialização da engine, antes de validar esses casos.
+
+### Cook e procedência do pacote
+
+A primeira tentativa terminou antes do cook com MSVC C3859/C1076 e erro 1455 de memória virtual no executor XGE. A execução seguinte usou o executor local, com configuração de memória da worktree, e compilou o alvo de jogo. O UAT iniciou um cook completo com Zen em uma worktree sem cook prévio. Processou 507 pacotes, pulou zero incrementalmente e 7 por plataforma. O `UnrealEditor-Cmd.exe` encerrou com código 0, cerca de três segundos após `LogCook: Display: Done!`. Stage e archive terminaram, e o UAT saiu com código 0. A falha de encerramento original não se repetiu nessa execução e sua causa permanece indeterminada.
+
+Os quatro materiais versionados coincidiram com os hashes dos ponteiros LFS. Os quatro constam no Asset Registry do cook e no manifesto UFS do pacote. SHA-256 do executável interno `EcosDeAethra/Binaries/Win64/EcosDeAethra.exe` `aad5746c616834fbeb3f49ea5466551e9f049d6eede0bf9b37889d37991ddd6a`.
+
+### Benchmark empacotado a 1920 × 1080
+
+Uma sessão curta de 10 segundos simulados aqueceu cada pacote. A medição de cada pacote usou a rota de passo fixo a 60 Hz, com 5 segundos de aquecimento interno, VSync desligado, limite de FPS desligado e saves isolados. Cada CSV contém 3.601 frames para os 60 segundos de simulação. A resolução também foi conferida nas imagens produzidas pelo jogo.
+
+| Métrica | Marco 02 original | Marco 02 corrigido |
+| --- | ---: | ---: |
+| FPS médio | 112,0 | 112,2 |
+| 1% low | 54,2 FPS | 54,3 FPS |
+| Frame p95 | 10,07 ms | 10,11 ms |
+| Frame p99 | 15,83 ms | 15,17 ms |
+| Pior frame | 33,31 ms | 37,57 ms |
+| Game Thread média | 2,42 ms | 2,46 ms |
+| Render Thread média | 7,44 ms | 7,43 ms |
+| GPU média | 7,93 ms | 7,91 ms |
+| RAM média (PhysicalUsedMB) | 1.468,73 MB | 1.496,72 MB |
+| VRAM local média | 664,54 MB | 663,84 MB |
+| Geração de chunks por frame ativo | — | 0,15 ms |
+| Malha e aplicação por frame ativo | 3,09 ms | 3,33 ms |
+| Aplicação da malha por frame ativo | 1,34 ms | 1,44 ms |
+
+Na execução corrigida, o 1% de frames mais lentos teve 14,91 ms de Game Thread em média. Nesses frames, geração, construção e aplicação de malhas representaram em média 0,13 ms e 2,49 ms, respectivamente, com a aplicação incluída na medição de malha. A Render Thread esperou 8,38 ms em média nesses frames. O tempo exclusivo de montagem da malha chegou a 10,87 ms no pior frame medido para essa métrica, com média de 1,89 ms nos frames em que rodou. A amostra associa os picos ao trabalho da Game Thread e ao streaming, mas não isola um único responsável. Preserve a arquitetura atual e capture uma trilha Unreal Insights para atribuir o tempo restante antes de mover tarefas para workers.
+
+| CSV em `Saved/Bench` | SHA-256 |
+| --- | --- |
+| Corrigido `Profile(20261119_175023).csv` | `ac74ec79cbfbf6abd12fdac5090f22a8e97237442d6ff11e0dedeec5f1177879` |
+| Original `Profile(20261119_175125).csv` | `de63db40988e5c80ca8444f53ed8265abf429a8165b4549c899638ec26a3c5b2` |
+
+A revisão dos CSVs confirmou 32,11 s de tempo real de frames no pacote corrigido e 32,17 s no original. Os 60 s acima descrevem o tempo da rota simulada. Para uma captura de 60 s reais, a opção `-RealTime` desliga o passo fixo e o resumo imprime a duração observada. Essa captura ainda está pendente. A rota executa no mesmo mapa e seed, com controle por tempo de jogo e pequenas variações de trajetória conforme o tempo de frame.
+
+Na worktree de correções, execute a partir da raiz.
+
+```powershell
+& .\Tools\Bench\test-bench-output.ps1
+$exe = (Resolve-Path .\Builds\Marco02Correcoes\Windows\EcosDeAethra.exe).Path
+& .\Tools\Bench\bench.ps1 -Name warmup -Seconds 10 -Exe $exe
+& .\Tools\Bench\bench.ps1 -Name medicao -Seconds 60 -Exe $exe
+& .\Tools\Bench\bench.ps1 -Name medicao-tempo-real -Seconds 60 -RealTime -Exe $exe
+```
+
+### Evidências reconferidas
+
+- O valor do AFS aparece nas pontas de `origin/main`, `origin/claude/marco-02-graficos` e `origin/claude/lis-core-01` registradas no clone local, em 21 commits únicos alcançáveis por essas três referências. Ele protege a inicialização do servidor de arquivos de builds Android com AFS. O risco é nulo para o executável Windows e condicional para APKs que ainda incorporem o valor. Trate-o como exposto e substitua APKs de desenvolvimento que ainda o aceitem, se existirem. A correção atual remove o valor da árvore proposta e preserva o histórico.
+- `Saved/Logs/EcosDeAethra-backup-2026.11.19-20.44.28.log` registra seis sucessos `Aethra.Voxel`, nas linhas 2104 a 2156.
+- Na execução original do UAT, `Cook-2026.11.19-17.47.58.txt` registra `Done!` na linha 1955 e `LogExit: Exiting.` na linha 1995. O `Log.txt` do UAT registra o cook com código 0 na linha 843 e a operação completa com código 0 na linha 1949.
+- O SHA-256 do executável e os hashes dos dois CSVs foram reconferidos. A tentativa de executar o pacote diretamente na sessão restrita atual falhou na inicialização (código 777003). Isso também deixou pendentes os testes manuais de teclado e mouse no pacote corrigido e a carga das cópias dos saves do Marco 01. A execução histórica da rota e os seis sucessos acima são de uma sessão anterior.
+
 ## Ambiente observado
 
 | Item | Resultado |
@@ -36,3 +102,45 @@ Os testes `Aethra.Voxel.Coordinates`, `Aethra.Voxel.Generation` e `Aethra.Voxel.
 ## Benchmark pendente
 
 Executar em Standalone a 1920 × 1080 no PC-alvo, com o preset F2, a mesma seed e uma rota repetível. Aquecer a cena por 20 s e gravar 60 s de percurso e edições com `csvprofile start` e `csvprofile stop`. Registrar FPS médio, frame time p95/p99, tempos de Game e GPU pelo `stat unit`, RAM, preset e resolução. A meta inicial de 60 FPS estáveis segue sem medição.
+
+## Marco 02 — Claude Code (19/11/2026)
+
+Branch `claude/marco-02-graficos`. Hardware: Ryzen 5 5500, RTX 3060 12 GB (driver 621.24), 16 GB, Windows 11, UE 5.8.4.
+
+### Build empacotada
+
+`Builds\Marco02\Windows\EcosDeAethra.exe` (Win64 Development). A build do Marco 01 em `Windows\` foi preservada. No UE 5.8.4 o processo de cook terminou com `LogCook: Display: Done!` e travou ao encerrar; o processo foi finalizado e o stage/pak/archive foi executado com `-skipcook` (UAT código 0).
+
+### Testes
+
+| Teste | Resultado |
+| --- | --- |
+| `Aethra.Voxel` (5 testes: Coordinates, Generation, Horizon, PersistAcrossRestart, SaveRoundTrip) | Aprovados no editor |
+| Persistência na build empacotada | Sessão 1 fez 30 edições pela rota; após fechar, a sessão 2 registrou `Loaded 30 voxel edits (revision 30) for seed 42819` e continuou gravando (save 9,2 → 12,5 KB) |
+| Saves do Marco 01 | Carregam sem aviso de save inválido e não são regravados ao abrir |
+| Movimento, salto, remoção de blocos, streaming e horizonte | Exercitados pela rota `-AethraBench` (passo fixo de 60 Hz) |
+| Colocação de bloco pelo mouse | Não exercitada na build; `SetBlock` de colocação coberto por `PersistAcrossRestart` |
+
+### Benchmark
+
+`Tools\Bench\bench.ps1`: 1920 × 1080 janela, VSync desligado, `-benchmark -fps=60`, rota fixa de 60 s após 5 s de aquecimento, uma remoção de bloco a cada 2 s. pXX = percentil XX do tempo de frame; 1% low = FPS médio do 1% de frames mais lentos.
+
+| Medição | FPS médio | p95 | p99 | 1% low | GPU médio | RAM |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base GPT (editor `-game`) | 283 | 4,4 ms | 7,2 ms | — | 2,2 ms | 2,3 GB* |
+| Marco 02 inicial (build empacotada) | 127 | 9,5 ms | 20,0 ms | — | 6,8 ms | 1,5 GB |
+| Marco 02 final (build empacotada) | 129 | 8,6 ms | 14,8 ms | 59 | 6,9 ms | 1,5 GB |
+
+\* O editor em `-game` inclui a memória do editor. VRAM local ~0,67 GB nas três medições.
+
+### Gargalo investigado
+
+Colunas próprias `Aethra/*` no csvprofile e `Tools\Bench\spikes.py` (compara o 1% de frames mais lentos com os frames típicos) mostraram que os picos vinham do cozimento síncrono de colisão: ~7 ms por chunk carregado e até ~60 ms por edição. O envio de malha do horizonte custava ~1,3 ms em média e não era a causa. Com colisão assíncrona, `ChunkUpload` caiu para 1,3 ms em média (máximo 5,8 ms). O pico restante (~10–14 ms na game thread) é a geração e a malha síncronas do chunk.
+
+### Pendências
+
+1. Gerar e montar a malha de chunks no thread pool, como já é feito no horizonte.
+2. Água sem fluxo: remover um bloco na margem não reabastece; sem reflexo de tela (SSR) em translúcidos.
+3. Horizonte ignora edições do jogador e não tem transição suave (popping) entre passos de LOD.
+4. Cook do UE 5.8.4 trava ao sair após `Done!`; investigar ou usar o watchdog descrito no HANDOFF.
+5. Teste manual de colocação de bloco com o mouse na build empacotada.
