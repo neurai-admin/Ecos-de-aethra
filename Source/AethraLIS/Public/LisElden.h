@@ -6,10 +6,15 @@
 #include "LisSimulation.h"
 #include "LisVoxelAdapter.h"
 
+// Experiment: the LIS 01 roster (7 farmers, 3 fishers, 3 woodcutters, 2 merchants, 3 guards, 2 explorers).
+// LivingVillage (LIS 03, the 3D village): 6 farmers, 2 fishers, 4 woodcutters, 3 builders, 3 merchants,
+// 2 guards, with Config.bLivingVillage on and a little wood in the village storage.
+enum class ELisRoster : uint8 { Experiment, LivingVillage };
+
 class AETHRALIS_API FLisElden
 {
 public:
-    explicit FLisElden(uint32 Seed = 2026);
+    explicit FLisElden(uint32 Seed = 2026, ELisRoster Roster = ELisRoster::Experiment);
 
     FLisSimulation Sim;
     FLisVoxelAdapter Adapter;

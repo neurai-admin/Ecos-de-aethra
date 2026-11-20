@@ -2,6 +2,7 @@
 # Usage (from any folder):
 #   powershell -ExecutionPolicy Bypass -File Tools\Bench\bench.ps1 -Name minha-medicao [-Seconds 60] [-Extra '-dpcvars=aethra.Horizon=0']
 #   -NoLIS measures the same route without the LIS villagers.
+#   -Elden runs the Elden village demo world (-AethraElden: its own seed, built at the start of the run).
 #   -Exe <packaged EcosDeAethra.exe> runs a packaged build instead of the editor in -game mode.
 # Run once with -Seconds 10 first after shader/material changes: the first run compiles shaders.
 param(
@@ -12,7 +13,8 @@ param(
     [string]$Project = '',
     [switch]$RealTime,
     # Runs the voxel world without the LIS villagers, to measure the cost of the NPC integration.
-    [switch]$NoLIS
+    [switch]$NoLIS,
+    [switch]$Elden
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'bench-output.ps1')
@@ -38,6 +40,7 @@ $arguments += '-windowed', '-ResX=1920', '-ResY=1080', '-ForceRes', '-nosound',
 if (-not $RealTime) { $arguments += '-benchmark', '-fps=60' }
 if ($Extra) { $arguments += $Extra }
 if ($NoLIS) { $arguments += '-NoLIS' }
+if ($Elden) { $arguments += '-AethraElden' }
 
 $process = Start-Process -FilePath $exeFile.FullName -ArgumentList $arguments -PassThru
 if (-not $process.WaitForExit(($Seconds + 180) * 1000)) {

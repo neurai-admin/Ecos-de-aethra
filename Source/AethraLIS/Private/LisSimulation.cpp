@@ -40,11 +40,13 @@ constexpr float Satisfies[NumActions][NumNeeds] = {
     { 0.f, .15f, 0.f, .5f, 0.f, .8f },   // Explore
     { .6f, 0.f, 0.f, .8f, 0.f, .4f },    // Patrol
     { 0.f, 0.f, 0.f, 0.f, 0.f, 0.f },    // Travel (never scored)
+    { 0.f, 0.f, 0.f, 1.f, 0.f, .4f },    // Build (living village)
+    { 0.f, .1f, 0.f, .8f, .3f, .2f },    // Tend (living village)
 };
 
-constexpr int32 Durations[NumActions] = { 1, 1, 7, 3, 3, 3, 1, 1, 1, 1, 2, 4, 3, 0 };
+constexpr int32 Durations[NumActions] = { 1, 1, 7, 3, 3, 3, 1, 1, 1, 1, 2, 4, 3, 0, 3, 2 };
 
-constexpr float BaseRelevance[LisNum<ELisEvent>()] = { .8f, .7f, .4f, .5f, .2f, .5f, .6f, .2f, .5f, .7f, .8f, .5f, .3f, .05f, .15f };
+constexpr float BaseRelevance[LisNum<ELisEvent>()] = { .8f, .7f, .4f, .5f, .2f, .5f, .6f, .2f, .5f, .7f, .8f, .5f, .3f, .05f, .15f, .45f, .08f, .6f };
 
 bool IsOutdoor(ELisPlace Place)
 {
@@ -82,9 +84,9 @@ float GoalBonus(ELisGoal Goal, ELisAction Action, ELisProfession Profession)
     case ELisGoal::MasterCraft:
         return LisSkillFor(Action) == Profession ? .25f : 0.f;
     case ELisGoal::Prosper:
-        return Action == ELisAction::Sell ? .25f : Action == ELisAction::Chop ? .1f : Action == ELisAction::Fish ? .05f : 0.f;
+        return Action == ELisAction::Sell ? .25f : Action == ELisAction::Chop ? .1f : Action == ELisAction::Tend ? .1f : Action == ELisAction::Fish ? .05f : 0.f;
     case ELisGoal::SupportCommunity:
-        return Action == ELisAction::GiveHelp ? .3f : (Action == ELisAction::Farm || Action == ELisAction::Fish || Action == ELisAction::Patrol) ? .15f : 0.f;
+        return Action == ELisAction::GiveHelp ? .3f : (Action == ELisAction::Farm || Action == ELisAction::Fish || Action == ELisAction::Patrol || Action == ELisAction::Build) ? .15f : 0.f;
     case ELisGoal::Discover:
         return Action == ELisAction::Explore ? .35f : 0.f;
     default:
@@ -114,6 +116,9 @@ float Interpret(const FLisNpc& Npc, const FLisEventRecord& E)
     case ELisEvent::Danger: V = -(.3f + .5f * P[ELisTrait::Caution] - .3f * P[ELisTrait::Courage]) * (bTarget ? 1.5f : 1.f); break;
     case ELisEvent::DangerRepelled: V = .3f + .4f * P[ELisTrait::Loyalty]; break;
     case ELisEvent::Met: V = .1f + .2f * P[ELisTrait::Sociability]; break;
+    case ELisEvent::PathBlocked: V = -(.2f + .3f * P[ELisTrait::Caution]); break;
+    case ELisEvent::SawWork: V = .05f + .1f * P[ELisTrait::Empathy]; break;
+    case ELisEvent::StructureDamaged: V = -(.3f + .4f * P[ELisTrait::Loyalty]); break;
     default: break;
     }
     return FMath::Clamp(V, -1.f, 1.f);
@@ -236,6 +241,7 @@ int32 FLisSimulation::AddNpc(ELisProfession Profession, ELisPlace Place)
         B.Hour = Hour;
     }
     Npc.BelievedFoodPrice = World.FoodPrice;
+    Npc.BelievedWoodStore = World.WoodStore;
     Npc.Place = Place;
     Npc.Tier = TierOf(Place);
     Npc.NextThink = Hour;
@@ -425,6 +431,18 @@ TArray<FLisOption> FLisSimulation::Evaluate(const FLisNpc& Npc) const
         }
         Add(ELisAction::Patrol, Riskiest, LisNobody);
     }
+    if (Config.bLivingVillage)
+    {
+        // Builders work from the village storage; damage they remember is worth a look even without wood.
+        if (Npc.Identity.Profession == ELisProfession::Builder && (Npc.BelievedWoodStore >= 1.f || RemembersDamage(Npc)))
+        {
+            Add(ELisAction::Build, ELisPlace::Village, LisNobody);
+        }
+        if (Npc.Identity.Profession == ELisProfession::Merchant)
+        {
+            Add(ELisAction::Tend, ELisPlace::Market, LisNobody);
+        }
+    }
     return Options;
 }
 
@@ -497,8 +515,19 @@ float FLisSimulation::Utility(const FLisNpc& Npc, ELisAction Action, ELisPlace P
     case ELisAction::Patrol:
         U *= .3f + .4f * P[ELisTrait::Loyalty] + .4f * P[ELisTrait::Courage];
         break;
+    case ELisAction::Build:
+        U += .1f * P[ELisTrait::Loyalty] + (RemembersDamage(Npc) ? .3f * (.5f + P[ELisTrait::Loyalty]) : 0.f);
+        break;
+    case ELisAction::Tend:
+        U += .12f * P[ELisTrait::Sociability] + .1f * CoinNeed;
+        break;
     default:
         break;
+    }
+    // A place the NPC recently found it could not reach: cautious people stay away longer.
+    if (Config.bLivingVillage && Place != Npc.Place)
+    {
+        U -= BlockedPenalty(Npc, Place);
     }
 
     // Learned risk of the destination: caution amplifies it, courage dampens it; guards are drawn to it.
@@ -630,6 +659,7 @@ void FLisSimulation::StartIntent(FLisNpc& Npc)
     case ELisAction::Chop: bValid = P.Stock >= 1.f; break;
     case ELisAction::Sell: bValid = Npc.Wood >= 1.f || Npc.Food >= 4.f; break;
     case ELisAction::BuyFood: bValid = Npc.Coins >= World.FoodPrice && P.Stock >= 1.f; break;
+    case ELisAction::Build: bValid = World.WoodStore >= 1.f || RemembersDamage(Npc); break;
     case ELisAction::AskHelp:
     case ELisAction::GiveHelp:
     {
@@ -693,11 +723,17 @@ void FLisSimulation::Complete(FLisNpc& Npc)
     {
         const bool bFarm = Action == ELisAction::Farm;
         const float Skill = SkillOf(bFarm ? ELisProfession::Farmer : ELisProfession::Woodcutter);
-        const float Yield = FMath::Min(P.Stock, (bFarm ? 1.5f + 3.f * Skill : 1.f + 2.f * Skill) * Scale);
+        // Living village: wood is what the 3D world really felled for this NPC, not an estimate.
+        const bool bWorldWood = !bFarm && Config.bLivingVillage;
+        const float Yield = FMath::Min(P.Stock, bWorldWood ? Npc.WorldYield : (bFarm ? 1.5f + 3.f * Skill : 1.f + 2.f * Skill) * Scale);
+        Npc.WorldYield = 0.f;
         P.Stock -= Yield;
         if (Yield < .5f)
         {
-            Emit(ELisEvent::ResourceDepleted, Npc.Place, Id, LisNobody, P.Stock);
+            if (!bWorldWood) // no tree in reach is not an empty forest
+            {
+                Emit(ELisEvent::ResourceDepleted, Npc.Place, Id, LisNobody, P.Stock);
+            }
             Practice(Npc, Action, false);
             Learn(Npc, Action, -.6f);
             break;
@@ -759,6 +795,7 @@ void FLisSimulation::Complete(FLisNpc& Npc)
             const float SpareFood = FMath::Max(0.f, Npc.Food - 3.f);
             const float Value = Npc.Wood * World.WoodPrice + SpareFood * World.FoodPrice * .8f;
             Amount = Value * (bFailed ? .45f : .9f + .2f * Rand(Id, 22));
+            World.WoodStore += Npc.Wood; // sold wood goes to the village storage
             Npc.Wood = 0.f;
             Npc.Food -= SpareFood;
             P.Stock += SpareFood; // food sold here goes on the market stalls
@@ -899,6 +936,34 @@ void FLisSimulation::Complete(FLisNpc& Npc)
         break;
     }
 
+    case ELisAction::Build:
+        if (World.WoodStore >= 1.f)
+        {
+            // Preparation only: the wood is really used up, what it becomes has no use in the world yet.
+            World.WoodStore -= 1.f;
+            World.Prepared += 1.f;
+            Npc.Need(ELisNeed::Work) -= .6f * Scale;
+            Npc.Need(ELisNeed::Purpose) -= .3f;
+            Practice(Npc, Action, true);
+            Learn(Npc, Action, .4f);
+        }
+        else
+        {
+            // Only inspected the damage it remembered: some purpose, little work done.
+            Npc.Need(ELisNeed::Work) -= .2f;
+            Npc.Need(ELisNeed::Purpose) -= .2f;
+            Practice(Npc, Action, false);
+            Learn(Npc, Action, .1f);
+        }
+        break;
+
+    case ELisAction::Tend:
+        Npc.Need(ELisNeed::Work) -= .5f * Scale;
+        Npc.Need(ELisNeed::Social) -= .2f;
+        Practice(Npc, Action, true);
+        Learn(Npc, Action, .2f);
+        break;
+
     case ELisAction::Patrol:
     {
         P.Danger = FMath::Max(P.BaseDanger * .5f, P.Danger * .6f);
@@ -1020,7 +1085,10 @@ void FLisSimulation::Observe(FLisNpc& Npc)
     B.Source = ELisSource::Observed;
     switch (Npc.Place)
     {
-    case ELisPlace::Village: B.Stock = World.Granary; break;
+    case ELisPlace::Village:
+        B.Stock = World.Granary;
+        Npc.BelievedWoodStore = World.WoodStore;
+        break;
     case ELisPlace::Market:
         Npc.BelievedFoodPrice = World.FoodPrice;
         B.Stock = World.Place(Npc.Place).Stock;
@@ -1217,6 +1285,13 @@ void FLisSimulation::Remember(FLisNpc& Npc, const FLisEventRecord& E, ELisSource
         B.Risk *= .85f;
         TouchRelation(E.Actor, [&](FLisRelation& R) { R.Respect += .1f * W; R.Trust += .04f * W; });
         break;
+    case ELisEvent::SawWork:
+        TouchRelation(E.Actor, [&](FLisRelation& R) { R.Respect += .01f * W; });
+        break;
+    case ELisEvent::StructureDamaged:
+        // Damage to the village: those loyal to it hold it against whoever did it.
+        TouchRelation(E.Actor, [&](FLisRelation& R) { R.Resentment += .05f * W * (.5f + P[ELisTrait::Loyalty]); R.Trust -= .02f * W; });
+        break;
     default:
         break;
     }
@@ -1236,7 +1311,7 @@ void FLisSimulation::Remember(FLisNpc& Npc, const FLisEventRecord& E, ELisSource
     M.Confidence = Confidence;
     M.Valence = Interpret(Npc, E);
     // Routine notes (arrivals, greetings) stay low even for those involved, so they are forgotten first.
-    const bool bRoutine = E.Type == ELisEvent::Arrived || E.Type == ELisEvent::Met;
+    const bool bRoutine = E.Type == ELisEvent::Arrived || E.Type == ELisEvent::Met || E.Type == ELisEvent::SawWork;
     M.Relevance = BaseRelevance[LisIdx(E.Type)] + (!bRoutine && (bTarget || bActor) ? .5f : 0.f) + (!bRoutine && bWorkplace ? .25f : 0.f);
     if (const FLisRelation* R = (E.Actor > 0 && !bActor) ? Npc.FindRelation(E.Actor) : nullptr)
     {
@@ -1291,7 +1366,8 @@ int32 FLisSimulation::ShareKnowledge(FLisNpc& Speaker, FLisNpc& Listener, int32 
     TArray<const FLisMemory*> Candidates;
     for (const FLisMemory& M : Speaker.Memories)
     {
-        const bool bWorthTelling = M.Type != ELisEvent::GoalChanged && M.Type != ELisEvent::Arrived && M.Type != ELisEvent::Met;
+        const bool bWorthTelling = M.Type != ELisEvent::GoalChanged && M.Type != ELisEvent::Arrived && M.Type != ELisEvent::Met
+            && M.Type != ELisEvent::SawWork;
         if (Hour - M.Hour <= RetellHours && bWorthTelling && !Listener.Knows(M.EventId))
         {
             Candidates.Add(&M);
@@ -1373,6 +1449,11 @@ bool FLisSimulation::TravelFailed(int32 Id)
     ++Stats.Replans;
     // An unreachable goal is a bad experience: the same plan becomes less attractive.
     Learn(*Npc, Npc->Intent, -.5f);
+    if (Config.bLivingVillage)
+    {
+        // Remembered (and later retold) with the place, so the next decision can weigh it.
+        Notice(Id, ELisEvent::PathBlocked, Npc->IntentPlace, Id, 0.f, World.Place(Npc->IntentPlace).Cell);
+    }
     return true;
 }
 
@@ -1424,4 +1505,63 @@ SIZE_T FLisSimulation::ApproxBytes() const
             + Npc.Identity.Name.GetAllocatedSize() + Npc.Identity.Origin.GetAllocatedSize();
     }
     return Bytes;
+}
+
+void FLisSimulation::ReportYield(int32 Id, float Amount)
+{
+    if (FLisNpc* Npc = Find(Id))
+    {
+        Npc->WorldYield += Amount;
+    }
+}
+
+int32 FLisSimulation::Notice(int32 Observer, ELisEvent Type, ELisPlace Place, int32 Actor, float Amount, FIntVector Cell)
+{
+    FLisNpc* Npc = Find(Observer);
+    if (!Npc)
+    {
+        return 0;
+    }
+    const FLisEventRecord E = LogEvent(Type, Place, Actor, LisNobody, Amount, Cell);
+    Remember(*Npc, E, ELisSource::Observed, LisNobody, 1.f);
+    return E.Id;
+}
+
+float FLisSimulation::BlockedPenalty(const FLisNpc& Npc, ELisPlace Place) const
+{
+    int64 Blocked = -1;
+    int64 Reached = -1;
+    float Confidence = 0.f;
+    for (const FLisMemory& M : Npc.Memories)
+    {
+        if (M.Place != Place)
+        {
+            continue;
+        }
+        if (M.Type == ELisEvent::PathBlocked && Hour - M.Hour <= 12 && M.Hour >= Blocked)
+        {
+            Blocked = M.Hour;
+            Confidence = M.Confidence;
+        }
+        else if (M.Type == ELisEvent::Arrived && M.Actor == Npc.Identity.Id)
+        {
+            Reached = FMath::Max(Reached, M.Hour);
+        }
+    }
+    if (Blocked < 0 || Reached > Blocked)
+    {
+        return 0.f; // never blocked, or got there since
+    }
+    const FLisPersonality& P = Npc.Personality;
+    const float Fade = 1.f - static_cast<float>(Hour - Blocked) / 13.f;
+    const float Wariness = FMath::Max(.05f, .3f + .4f * P[ELisTrait::Caution] - .25f * P[ELisTrait::Courage] - .15f * P[ELisTrait::Ambition]);
+    return Confidence * Fade * Wariness;
+}
+
+bool FLisSimulation::RemembersDamage(const FLisNpc& Npc, int64 WithinHours) const
+{
+    return Npc.Memories.ContainsByPredicate([this, WithinHours](const FLisMemory& M)
+    {
+        return M.Type == ELisEvent::StructureDamaged && Hour - M.Hour <= WithinHours;
+    });
 }
