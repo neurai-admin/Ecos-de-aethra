@@ -27,8 +27,17 @@ public:
     UFUNCTION(BlueprintPure, Category="Voxel")
     EAethraBlock GetBlock(FIntVector Cell) const;
 
+    // Unchanged contract: same as SetBlockBy with an Unknown instigator.
     UFUNCTION(BlueprintCallable, Category="Voxel")
     bool SetBlock(FIntVector Cell, EAethraBlock Block);
+
+    // Same validation, save and broadcast as SetBlock; OnBlockChanged reports who made the change.
+    UFUNCTION(BlueprintCallable, Category="Voxel")
+    bool SetBlockBy(FIntVector Cell, EAethraBlock Block, const FAethraInstigator& By);
+
+    // Read-only: the whole column at Point (generation plus saved edits), bottom to top.
+    // One terrain generation instead of one per GetBlock call; for navigation and AI queries.
+    void GetColumn(FIntPoint Point, TArray<EAethraBlock>& OutColumn) const;
 
     FVector PrepareSpawn();
     void SetStreamingRadius(int32 Radius);
