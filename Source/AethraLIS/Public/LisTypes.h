@@ -107,6 +107,14 @@ struct FLisPlaceBelief
     ELisSource Source = ELisSource::Observed;
 };
 
+// An event whose memory was evicted while it could still be retold. Keeping its id stops
+// hearsay from re-applying effects (risk, relations) the NPC already took into account.
+struct FLisForgotten
+{
+    int32 EventId = 0;
+    int64 EventHour = 0;
+};
+
 struct FLisNpc
 {
     FLisIdentity Identity;
@@ -122,6 +130,7 @@ struct FLisNpc
     FLisPlaceBelief Beliefs[LisNum<ELisPlace>()];     // Village stock = community granary
     float BelievedFoodPrice = 2.f;
     TArray<FLisMemory> Memories;
+    TArray<FLisForgotten> Forgotten;
     TMap<int32, FLisRelation> Relations;
 
     ELisAction Current = ELisAction::Idle;   // running step (Travel or the intent)
@@ -143,6 +152,11 @@ struct FLisNpc
     const FLisRelation* FindRelation(int32 Other) const { return Relations.Find(Other); }
     FLisRelation& Relation(int32 Other) { return Relations.FindOrAdd(Other); }
     const FLisMemory* FindMemory(int32 EventId) const { return Memories.FindByPredicate([EventId](const FLisMemory& M) { return M.EventId == EventId; }); }
+    // Remembered now, or forgotten recently enough that its effects must not be applied again.
+    bool Knows(int32 EventId) const
+    {
+        return FindMemory(EventId) || Forgotten.ContainsByPredicate([EventId](const FLisForgotten& F) { return F.EventId == EventId; });
+    }
 };
 
 struct FLisPlaceState

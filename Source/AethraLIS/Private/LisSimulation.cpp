@@ -19,6 +19,7 @@ float Hash01(uint32 Seed, int64 Hour, int32 Actor, uint32 Salt)
 }
 
 constexpr int64 GenerationHour = -1; // generation draws are independent of simulated time
+constexpr int64 RetellHours = 96;    // NPCs only pass on events this recent
 
 constexpr int32 NumActions = LisNum<ELisAction>();
 constexpr int32 NumNeeds = LisNum<ELisNeed>();
@@ -162,7 +163,7 @@ FLisSimulation::FLisSimulation(uint32 InSeed)
     Set(ELisPlace::Fields, 1.5f, 0.f, 60.f, 80.f, 1.2f, 0.f);
     Set(ELisPlace::Forest, 3.f, 1.5f, 120.f, 150.f, .3f, .03f);
     Set(ELisPlace::River, 0.f, 2.f, 30.f, 40.f, .8f, .01f);
-    Set(ELisPlace::Market, -1.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+    Set(ELisPlace::Market, -1.f, 0.f, 15.f, 30.f, .4f, 0.f); // stock = food on the stalls; regen = imports
     Set(ELisPlace::Wilds, 5.f, 4.f, 0.f, 60.f, .1f, .08f);
 }
 
@@ -391,7 +392,7 @@ TArray<FLisOption> FLisSimulation::Evaluate(const FLisNpc& Npc) const
     {
         Add(ELisAction::Sell, ELisPlace::Market, LisNobody);
     }
-    if (Npc.Coins >= Npc.BelievedFoodPrice)
+    if (Npc.Coins >= Npc.BelievedFoodPrice && Expected(ELisPlace::Market) >= 1.f)
     {
         Add(ELisAction::BuyFood, ELisPlace::Market, LisNobody);
     }
@@ -526,7 +527,7 @@ float FLisSimulation::Utility(const FLisNpc& Npc, ELisAction Action, ELisPlace P
 int32 FLisSimulation::FindHelper(const FLisNpc& Npc) const
 {
     int32 Best = LisNobody;
-    float BestBond = .9f; // only people the NPC regards above neutral
+    float BestBond = 1.f; // only people the NPC regards above neutral (0.5 trust + 0.5 affection)
     for (const TPair<int32, FLisRelation>& Pair : Npc.Relations)
     {
         const float Bond = Pair.Value.Trust + Pair.Value.Affection - Pair.Value.Resentment;
@@ -622,7 +623,7 @@ void FLisSimulation::StartIntent(FLisNpc& Npc)
     case ELisAction::Farm:
     case ELisAction::Chop: bValid = P.Stock >= 1.f; break;
     case ELisAction::Sell: bValid = Npc.Wood >= 1.f || Npc.Food >= 4.f; break;
-    case ELisAction::BuyFood: bValid = Npc.Coins >= World.FoodPrice; break;
+    case ELisAction::BuyFood: bValid = Npc.Coins >= World.FoodPrice && P.Stock >= 1.f; break;
     case ELisAction::AskHelp:
     case ELisAction::GiveHelp:
     {
@@ -754,24 +755,35 @@ void FLisSimulation::Complete(FLisNpc& Npc)
             Amount = Value * (bFailed ? .45f : .9f + .2f * Rand(Id, 22));
             Npc.Wood = 0.f;
             Npc.Food -= SpareFood;
-            Npc.Coins += Amount;
+            P.Stock += SpareFood; // food sold here goes on the market stalls
             Npc.Need(ELisNeed::Work) -= .3f;
+            // The merchant's cut comes out of the sale, not out of nowhere.
             if (FLisNpc* Merchant = Find(Partner))
             {
-                Merchant->Coins += Value * .1f;
+                const float Cut = Amount * .1f;
+                Merchant->Coins += Cut;
+                Amount -= Cut;
             }
+            Npc.Coins += Amount;
         }
         else
         {
-            const int32 Units = FMath::Min(3, FMath::FloorToInt(Npc.Coins / World.FoodPrice));
+            // The market sells only what its stalls hold (imports and what villagers sold), whatever the coins.
+            const int32 Units = FMath::Min3(3, FMath::FloorToInt(Npc.Coins / World.FoodPrice), FMath::FloorToInt(P.Stock));
             if (Units < 1)
             {
                 ++Npc.Replans;
                 ++Stats.Replans;
                 break;
             }
-            Npc.Coins -= Units * World.FoodPrice;
+            const float Paid = Units * World.FoodPrice;
+            Npc.Coins -= Paid;
+            if (FLisNpc* Merchant = Find(Partner))
+            {
+                Merchant->Coins += Paid * .1f;
+            }
             Amount = bFailed ? Units * .5f : static_cast<float>(Units);
+            P.Stock -= Units; // a failed deal still takes the goods: half spoils or goes missing
             Npc.Food += Amount;
         }
         Emit(bFailed ? ELisEvent::TradeFailed : ELisEvent::TradeSucceeded, ELisPlace::Market, Id, Partner, Amount);
@@ -1003,13 +1015,16 @@ void FLisSimulation::Observe(FLisNpc& Npc)
     switch (Npc.Place)
     {
     case ELisPlace::Village: B.Stock = World.Granary; break;
-    case ELisPlace::Market: Npc.BelievedFoodPrice = World.FoodPrice; break;
+    case ELisPlace::Market:
+        Npc.BelievedFoodPrice = World.FoodPrice;
+        B.Stock = World.Place(Npc.Place).Stock;
+        break;
     case ELisPlace::Wilds: break; // what grows in the wilds is only found by exploring
     default: B.Stock = World.Place(Npc.Place).Stock; break;
     }
 }
 
-int32 FLisSimulation::Emit(ELisEvent Type, ELisPlace Place, int32 Actor, int32 Target, float Amount, FIntVector Cell)
+FLisEventRecord FLisSimulation::LogEvent(ELisEvent Type, ELisPlace Place, int32 Actor, int32 Target, float Amount, FIntVector Cell)
 {
     FLisEventRecord E;
     E.Id = NextEventId++;
@@ -1023,9 +1038,16 @@ int32 FLisSimulation::Emit(ELisEvent Type, ELisPlace Place, int32 Actor, int32 T
     Events.Add(E);
     if (Events.Num() > Config.EventLogCapacity)
     {
-        Events.RemoveAt(0, Events.Num() - Config.EventLogCapacity);
+        // Trim a quarter at once so a full log does not shift the whole array on every event.
+        Events.RemoveAt(0, Events.Num() - Config.EventLogCapacity * 3 / 4);
     }
     ++Stats.Events;
+    return E;
+}
+
+int32 FLisSimulation::Emit(ELisEvent Type, ELisPlace Place, int32 Actor, int32 Target, float Amount, FIntVector Cell)
+{
+    const FLisEventRecord E = LogEvent(Type, Place, Actor, Target, Amount, Cell);
     for (FLisNpc& Npc : Npcs)
     {
         const int32 Id = Npc.Identity.Id;
@@ -1039,20 +1061,7 @@ int32 FLisSimulation::Emit(ELisEvent Type, ELisPlace Place, int32 Actor, int32 T
 
 int32 FLisSimulation::EmitAtCell(ELisEvent Type, ELisPlace Place, int32 Actor, float Amount, FIntVector Cell)
 {
-    FLisEventRecord E;
-    E.Id = NextEventId++;
-    E.Type = Type;
-    E.Place = Place;
-    E.Hour = Hour;
-    E.Actor = Actor;
-    E.Amount = Amount;
-    E.Cell = Cell;
-    Events.Add(E);
-    if (Events.Num() > Config.EventLogCapacity)
-    {
-        Events.RemoveAt(0, Events.Num() - Config.EventLogCapacity);
-    }
-    ++Stats.Events;
+    const FLisEventRecord E = LogEvent(Type, Place, Actor, LisNobody, Amount, Cell);
     const FIntVector Offset = World.Place(Place).Cell - Cell;
     const bool bInRange = FVector(Offset.X, Offset.Y, 0.f).Size() <= Config.PerceptionRadiusCells;
     for (FLisNpc& Npc : Npcs)
@@ -1071,6 +1080,10 @@ void FLisSimulation::Remember(FLisNpc& Npc, const FLisEventRecord& E, ELisSource
     {
         Known->Confidence = FMath::Max(Known->Confidence, Confidence);
         return;
+    }
+    if (Npc.Knows(E.Id))
+    {
+        return; // forgotten, but its effects were already applied
     }
 
     const int32 Self = Npc.Identity.Id;
@@ -1106,8 +1119,12 @@ void FLisSimulation::Remember(FLisNpc& Npc, const FLisEventRecord& E, ELisSource
         break;
     case ELisEvent::ResourceFound:
         B.bKnown = true;
-        B.Stock = FMath::Max(B.Stock, E.Amount * Confidence);
-        B.Hour = FMath::Max(B.Hour, E.Hour);
+        // Old news must not undo a more recent look at the place.
+        if (Newer())
+        {
+            B.Stock = FMath::Max(B.Stock, E.Amount * Confidence);
+            B.Hour = E.Hour;
+        }
         break;
     case ELisEvent::ResourceDepleted:
         if (Newer())
@@ -1117,7 +1134,10 @@ void FLisSimulation::Remember(FLisNpc& Npc, const FLisEventRecord& E, ELisSource
         }
         break;
     case ELisEvent::ResourceRemoved:
-        B.Stock = FMath::Max(0.f, B.Stock - E.Amount * W);
+        if (Newer()) // a later look at the place already includes the removal
+        {
+            B.Stock = FMath::Max(0.f, B.Stock - E.Amount * W);
+        }
         if (bWorkplace)
         {
             Npc.Need(ELisNeed::Purpose) += .2f * W;
@@ -1243,6 +1263,12 @@ void FLisSimulation::Forget(FLisNpc& Npc)
             Weakest = I;
         }
     }
+    const FLisMemory& Lost = Npc.Memories[Weakest];
+    Npc.Forgotten.RemoveAll([this](const FLisForgotten& F) { return Hour - F.EventHour > RetellHours; });
+    if (Hour - Lost.Hour <= RetellHours)
+    {
+        Npc.Forgotten.Add({ Lost.EventId, Lost.Hour });
+    }
     Npc.Memories.RemoveAt(Weakest);
     ++Stats.MemoriesForgotten;
 }
@@ -1252,7 +1278,7 @@ int32 FLisSimulation::ShareKnowledge(FLisNpc& Speaker, FLisNpc& Listener, int32 
     TArray<const FLisMemory*> Candidates;
     for (const FLisMemory& M : Speaker.Memories)
     {
-        if (Hour - M.Hour <= 96 && M.Type != ELisEvent::GoalChanged && !Listener.FindMemory(M.EventId))
+        if (Hour - M.Hour <= RetellHours && M.Type != ELisEvent::GoalChanged && !Listener.Knows(M.EventId))
         {
             Candidates.Add(&M);
         }
@@ -1316,7 +1342,7 @@ SIZE_T FLisSimulation::ApproxBytes() const
     SIZE_T Bytes = sizeof(*this) + Npcs.GetAllocatedSize() + Events.GetAllocatedSize();
     for (const FLisNpc& Npc : Npcs)
     {
-        Bytes += Npc.Memories.GetAllocatedSize() + Npc.Relations.GetAllocatedSize()
+        Bytes += Npc.Memories.GetAllocatedSize() + Npc.Forgotten.GetAllocatedSize() + Npc.Relations.GetAllocatedSize()
             + Npc.Identity.Name.GetAllocatedSize() + Npc.Identity.Origin.GetAllocatedSize();
     }
     return Bytes;

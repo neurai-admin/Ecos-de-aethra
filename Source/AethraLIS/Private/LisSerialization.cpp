@@ -9,13 +9,28 @@
 
 namespace
 {
+// Enums index fixed arrays after loading: an out-of-range value marks the archive as bad.
 template <typename E>
-void SerEnum(FArchive& Ar, E& Value)
+void SerEnumN(FArchive& Ar, E& Value, int32 Num)
 {
     uint8 Raw = static_cast<uint8>(Value);
     Ar << Raw;
+    if (Ar.IsLoading() && Raw >= Num)
+    {
+        Ar.SetError();
+        return;
+    }
     Value = static_cast<E>(Raw);
 }
+
+template <typename E>
+void SerEnum(FArchive& Ar, E& Value)
+{
+    SerEnumN(Ar, Value, LisNum<E>());
+}
+
+constexpr int32 NumSources = 2; // ELisSource
+constexpr int32 NumTiers = 3;   // ELisTier
 
 template <typename T, int32 N>
 void SerFloats(FArchive& Ar, T (&Values)[N])
@@ -45,11 +60,11 @@ void SerMemory(FArchive& Ar, FLisMemory& M)
     SerEnum(Ar, M.Type);
     SerEnum(Ar, M.Place);
     Ar << M.Hour << M.LearnedHour << M.Actor << M.Target << M.Amount;
-    SerEnum(Ar, M.Source);
+    SerEnumN(Ar, M.Source, NumSources);
     Ar << M.ToldBy << M.Confidence << M.Relevance << M.Valence;
 }
 
-void SerNpc(FArchive& Ar, FLisNpc& Npc)
+void SerNpc(FArchive& Ar, FLisNpc& Npc, int32 Version)
 {
     Ar << Npc.Identity.Id << Npc.Identity.Name << Npc.Identity.Age;
     SerEnum(Ar, Npc.Identity.Profession);
@@ -64,7 +79,7 @@ void SerNpc(FArchive& Ar, FLisNpc& Npc)
     for (FLisPlaceBelief& B : Npc.Beliefs)
     {
         Ar << B.bKnown << B.Stock << B.Risk << B.Confidence << B.Hour;
-        SerEnum(Ar, B.Source);
+        SerEnumN(Ar, B.Source, NumSources);
     }
     Ar << Npc.BelievedFoodPrice;
 
@@ -116,9 +131,29 @@ void SerNpc(FArchive& Ar, FLisNpc& Npc)
     SerEnum(Ar, Npc.Intent);
     SerEnum(Ar, Npc.IntentPlace);
     Ar << Npc.IntentTarget << Npc.BusyUntil << Npc.NextThink;
-    SerEnum(Ar, Npc.Tier);
+    SerEnumN(Ar, Npc.Tier, NumTiers);
     Ar << Npc.Decisions << Npc.Replans << Npc.GoalChanges;
     SerFloats(Ar, Npc.ActionCount);
+
+    // Version 2: events forgotten while they could still be retold.
+    if (Version >= 2)
+    {
+        int32 ForgottenCount = Npc.Forgotten.Num();
+        Ar << ForgottenCount;
+        if (Ar.IsLoading())
+        {
+            if (ForgottenCount < 0 || ForgottenCount > 1 << 16)
+            {
+                Ar.SetError();
+                return;
+            }
+            Npc.Forgotten.SetNum(ForgottenCount);
+        }
+        for (FLisForgotten& F : Npc.Forgotten)
+        {
+            Ar << F.EventId << F.EventHour;
+        }
+    }
 }
 }
 
@@ -137,6 +172,13 @@ void FLisSimulation::Serialize(FArchive& Ar)
     Ar << Config.MaxDecisionsPerTick << Config.MemoryCapacity << Config.EventLogCapacity << Config.MidThinkHours << Config.FarStepHours
        << Config.NearRadius << Config.MidRadius << Config.PerceptionRadiusCells;
     SerEnum(Ar, Config.Focus);
+    // These are divisors, capacities and budgets: zero or negative values would crash the next Tick.
+    if (Ar.IsLoading() && (Config.MaxDecisionsPerTick < 0 || Config.MemoryCapacity < 1 || Config.EventLogCapacity < 1
+        || Config.MidThinkHours < 1 || Config.FarStepHours < 1))
+    {
+        Ar.SetError();
+        return;
+    }
 
     for (FLisPlaceState& P : World.Places)
     {
@@ -161,6 +203,10 @@ void FLisSimulation::Serialize(FArchive& Ar)
     for (FLisEventRecord& E : Events)
     {
         SerEvent(Ar, E);
+        if (Ar.IsError())
+        {
+            return;
+        }
     }
 
     int32 NpcCount = Npcs.Num();
@@ -174,9 +220,14 @@ void FLisSimulation::Serialize(FArchive& Ar)
         }
         Npcs.SetNum(NpcCount);
     }
-    for (FLisNpc& Npc : Npcs)
+    for (int32 I = 0; I < Npcs.Num(); ++I)
     {
-        SerNpc(Ar, Npc);
+        SerNpc(Ar, Npcs[I], Version);
+        // Find() maps id N to index N-1.
+        if (Ar.IsLoading() && Npcs[I].Identity.Id != I + 1)
+        {
+            Ar.SetError();
+        }
         if (Ar.IsError())
         {
             return;

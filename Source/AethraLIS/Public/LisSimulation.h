@@ -88,7 +88,7 @@ public:
 
     // Persistence: versioned binary format. Load replaces the whole state.
     static constexpr uint32 SaveMagic = 0x3153494C; // "LIS1"
-    static constexpr int32 SaveVersion = 1;
+    static constexpr int32 SaveVersion = 2; // 2: FLisNpc::Forgotten. Version 1 still loads.
     void Serialize(FArchive& Ar);
     TArray<uint8> SaveToBytes() const;
     bool LoadFromBytes(const TArray<uint8>& Bytes);
@@ -104,6 +104,8 @@ public:
 
 private:
     void TickHour();
+    // Appends the objective record to the log and returns a copy (the log may reallocate).
+    FLisEventRecord LogEvent(ELisEvent Type, ELisPlace Place, int32 Actor, int32 Target, float Amount, FIntVector Cell);
     void Complete(FLisNpc& Npc);
     void StartIntent(FLisNpc& Npc);
     void Aggregate(FLisNpc& Npc);

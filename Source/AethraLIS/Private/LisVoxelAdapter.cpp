@@ -19,7 +19,8 @@ int32 FLisVoxelAdapter::Flush(FLisSimulation& Sim)
         ELisVoxelResource Resource;
         int32 Actor;
         int32 Blocks;
-        FIntVector Cell;
+        FIntVector Cell;  // the group's change closest to the place anchor decides who can see it
+        float Distance;
     };
     TArray<FGroup> Groups;
 
@@ -39,8 +40,11 @@ int32 FLisVoxelAdapter::Flush(FLisSimulation& Sim)
         }
         const ELisVoxelResource Before = Classify(Change.Before);
         const ELisVoxelResource After = Classify(Change.After);
-        const bool bRemoved = Before != ELisVoxelResource::None && Change.After == 0;
-        const bool bPlaced = Change.Before == 0 && Change.After != 0;
+        // Air (id 0) and water are both "empty" space a block can be taken into or put in.
+        const bool bBeforeEmpty = Change.Before == 0 || Before == ELisVoxelResource::Water;
+        const bool bAfterEmpty = Change.After == 0 || After == ELisVoxelResource::Water;
+        const bool bRemoved = !bBeforeEmpty && Before != ELisVoxelResource::None && bAfterEmpty;
+        const bool bPlaced = bBeforeEmpty && !bAfterEmpty;
         if (Nearest == INDEX_NONE || (!bRemoved && !bPlaced))
         {
             ++Ignored;
@@ -55,7 +59,12 @@ int32 FLisVoxelAdapter::Flush(FLisSimulation& Sim)
         });
         if (!Group)
         {
-            Group = &Groups.Add_GetRef({ Place, Type, Resource, Change.Actor, 0, Change.Cell });
+            Group = &Groups.Add_GetRef({ Place, Type, Resource, Change.Actor, 0, Change.Cell, NearestDistance });
+        }
+        else if (NearestDistance < Group->Distance)
+        {
+            Group->Cell = Change.Cell;
+            Group->Distance = NearestDistance;
         }
         ++Group->Blocks;
     }
