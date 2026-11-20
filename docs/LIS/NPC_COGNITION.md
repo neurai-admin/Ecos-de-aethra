@@ -12,7 +12,7 @@
 | Pescar | sempre | Rio |
 | Cortar lenha | espera estoque na floresta | Floresta |
 | Vender | tem lenha ou sobra de comida | Mercado |
-| Comprar comida | tem moedas pelo último preço visto | Mercado |
+| Comprar comida | tem moedas pelo último preço visto e acredita que o Mercado tem comida | Mercado |
 | Pedir ajuda | sem comida e conhece alguém com laço acima do neutro | Vila |
 | Ajudar | tem comida e vê alguém faminto no mesmo local | onde está |
 | Conviver | sempre | Vila |

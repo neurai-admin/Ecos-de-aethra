@@ -34,7 +34,7 @@ Arquivos compartilhados alterados: `EcosDeAethra.uproject` (declara o módulo) e
 
 ## Mundo abstrato
 
-Seis locais com posição num mapa de horas de caminhada: Vila (com o celeiro comunitário), Campos, Floresta, Rio, Mercado e Ermo. Cada local tem estoque, capacidade, rebrota, perigo e uma célula voxel de ancoragem. Preço da comida sobe quando o celeiro baixa. O mundo é a verdade; os NPCs só conhecem suas crenças sobre ele.
+Seis locais com posição num mapa de horas de caminhada: Vila (com o celeiro comunitário), Campos, Floresta, Rio, Mercado e Ermo. Cada local tem estoque, capacidade, rebrota, perigo e uma célula voxel de ancoragem. Preço da comida sobe quando o celeiro baixa. O estoque do Mercado é a comida nas bancas: cresce com importações (0,4 por hora, até 30) e com a comida que os aldeões vendem, e só ele abastece quem compra. O mundo é a verdade; os NPCs só conhecem suas crenças sobre ele.
 
 ## Ciclo de uma hora (`TickHour`)
 
@@ -58,7 +58,7 @@ Toda variação vem de `Rand(ator, sal)`, um hash de seed, hora, ator e sal, sem
 
 ## Persistência
 
-`SaveToFile` grava um binário com assinatura `LIS1` e versão 1: configuração, mundo, estatísticas, log de eventos e, por NPC, identidade, personalidade, necessidades, objetivo, inventário, habilidades, expectativas, crenças, memórias, relações, plano em andamento e contadores. A escrita usa arquivo temporário e renomeação. Versão desconhecida ou arquivo truncado são rejeitados sem alterar o estado. O save voxel não foi alterado; o LIS deve gravar em arquivo próprio, por exemplo `Saved/LIS/<seed>.lis`.
+`SaveToFile` grava um binário com assinatura `LIS1` e versão 2: configuração, mundo, estatísticas, log de eventos e, por NPC, identidade, personalidade, necessidades, objetivo, inventário, habilidades, expectativas, crenças, memórias, relações, plano em andamento e contadores. A escrita usa arquivo temporário e renomeação. A versão 2 acrescenta, por NPC, os eventos esquecidos recentemente (`Forgotten`); saves da versão 1 continuam carregando. Versão desconhecida, arquivo truncado, enum fora da faixa, configuração inválida (passo distante, capacidades ou orçamento zerados ou negativos) e id de NPC fora da posição são rejeitados sem alterar o estado. O save voxel não foi alterado; o LIS deve gravar em arquivo próprio, por exemplo `Saved/LIS/<seed>.lis`.
 
 ## Limites desta fase
 

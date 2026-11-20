@@ -6,16 +6,16 @@ Seed 2026, 480 horas simuladas (20 dias), 20 NPCs.
 
 | Métrica | Valor |
 | --- | --- |
-| Tempo médio por hora simulada | 0.0061 ms |
-| Pior hora simulada | 0.0334 ms |
+| Tempo médio por hora simulada | 0.0065 ms |
+| Pior hora simulada | 0.0258 ms |
 | Decisões | 2297 (5.74 por NPC por dia) |
 | Replanejamentos | 75 (3.3% das decisões) |
 | Decisões adiadas pelo orçamento | 0 |
 | Mudanças de objetivo | 5 |
 | Eventos | 237 |
 | Memórias atuais / formadas / esquecidas | 929 / 1266 / 337 |
-| Memória aproximada da simulação | 124.1 KB |
-| Save | 71353 bytes |
+| Memória aproximada da simulação | 124.6 KB |
+| Save | 71433 bytes |
 
 ## Habitantes
 
@@ -53,19 +53,19 @@ Seed 2026, 480 horas simuladas (20 dias), 20 NPCs.
 | Nyan | Agricultor | -Coragem -Ambição +Empatia +Curiosidade +Agressividade -Sociabilidade | fome 0.03, comida 8.2, moedas 7.1 | Plantar/colher 0.52 | Pescar 0.16 | Vender 0.09 |
 | Areth | Agricultor | +Coragem -Ambição +Curiosidade -Agressividade -Lealdade -Sociabilidade -Cautela | fome 0.60, comida 11.2, moedas 8.5 | Comer 1.04 | Plantar/colher 0.67 | Conviver 0.32 |
 | Daris | Agricultor | +Coragem +Ambição +Empatia +Curiosidade +Agressividade -Sociabilidade +Cautela | fome 0.18, comida 2.2, moedas 6.6 | Plantar/colher 0.34 | Comer 0.17 | Explorar 0.16 |
-| Elon | Pescador | -Coragem +Ambição -Empatia +Lealdade -Cautela | fome 0.39, comida 3.1, moedas 6.8 | Comer 0.51 | Pescar 0.43 | Conviver 0.30 |
+| Elon | Pescador | -Coragem +Ambição -Empatia +Lealdade -Cautela | fome 0.39, comida 3.1, moedas 6.5 | Comer 0.51 | Pescar 0.43 | Conviver 0.30 |
 | Renia | Pescador | -Coragem -Ambição -Curiosidade -Lealdade +Cautela | fome 0.33, comida 13.5, moedas 7.2 | Pescar 0.74 | Comer 0.40 | Conviver 0.19 |
-| Mien | Pescador | +Ambição +Agressividade +Sociabilidade | fome 0.03, comida 1.0, moedas 10.1 | Conviver 0.42 | Pescar 0.36 | Pedir ajuda 0.06 |
-| Breric | Lenhador | +Ambição +Agressividade +Lealdade -Cautela | fome 0.24, comida 0.2, moedas 10.8 | Cortar lenha 0.41 | Vender 0.41 | Comer 0.25 |
-| Toron | Lenhador | -Coragem -Empatia -Curiosidade -Agressividade +Lealdade -Sociabilidade -Cautela | fome 0.24, comida 0.2, moedas 13.3 | Cortar lenha 0.37 | Pescar 0.27 | Comer 0.25 |
-| Sueth | Lenhador | -Ambição +Agressividade -Cautela | fome 0.12, comida 0.4, moedas 13.9 | Cortar lenha 0.47 | Pescar 0.13 | Plantar/colher 0.12 |
-| Linwyn | Comerciante | +Coragem +Empatia -Curiosidade -Agressividade +Lealdade | fome 0.12, comida 0.5, moedas 1.3 | Plantar/colher 0.19 | Patrulhar 0.19 | Pescar 0.16 |
-| Nyis | Comerciante | +Ambição +Curiosidade | fome 0.03, comida 0.1, moedas 1.6 | Conviver 0.36 | Cortar lenha 0.21 | Plantar/colher 0.20 |
+| Mien | Pescador | +Ambição +Agressividade +Sociabilidade | fome 0.03, comida 1.0, moedas 9.9 | Conviver 0.42 | Pescar 0.36 | Pedir ajuda 0.06 |
+| Breric | Lenhador | +Ambição +Agressividade +Lealdade -Cautela | fome 0.24, comida 0.2, moedas 10.7 | Cortar lenha 0.41 | Vender 0.41 | Comer 0.25 |
+| Toron | Lenhador | -Coragem -Empatia -Curiosidade -Agressividade +Lealdade -Sociabilidade -Cautela | fome 0.24, comida 0.2, moedas 13.0 | Cortar lenha 0.37 | Pescar 0.27 | Comer 0.25 |
+| Sueth | Lenhador | -Ambição +Agressividade -Cautela | fome 0.12, comida 0.4, moedas 13.5 | Cortar lenha 0.47 | Pescar 0.13 | Plantar/colher 0.12 |
+| Linwyn | Comerciante | +Coragem +Empatia -Curiosidade -Agressividade +Lealdade | fome 0.12, comida 0.5, moedas 1.5 | Plantar/colher 0.19 | Patrulhar 0.19 | Pescar 0.16 |
+| Nyis | Comerciante | +Ambição +Curiosidade | fome 0.03, comida 0.1, moedas 1.7 | Conviver 0.36 | Cortar lenha 0.20 | Plantar/colher 0.20 |
 | Mior | Guarda | -Ambição +Curiosidade +Agressividade -Lealdade +Cautela | fome 0.06, comida 0.5, moedas 5.1 | Dormir 0.59 | Conviver 0.33 | Patrulhar 0.28 |
 | Goren | Guarda | +Coragem +Empatia -Curiosidade -Lealdade -Sociabilidade +Cautela | fome 0.27, comida 0.3, moedas 5.2 | Patrulhar 0.80 | Comer 0.33 | Conviver 0.19 |
 | Goria | Guarda | +Empatia -Agressividade -Lealdade -Sociabilidade -Cautela | fome 0.09, comida 0.2, moedas 6.2 | Patrulhar 0.83 | Conviver 0.09 | Plantar/colher 0.08 |
 | Nya | Explorador | -Coragem +Ambição -Empatia +Curiosidade +Lealdade -Sociabilidade | fome 0.00, comida 0.0, moedas 7.8 | Pescar 0.21 | Explorar 0.20 | Plantar/colher 0.17 |
-| Mion | Explorador | -Coragem +Ambição +Empatia +Curiosidade -Agressividade +Lealdade +Sociabilidade | fome 0.15, comida 0.0, moedas 10.5 | Cortar lenha 0.26 | Explorar 0.22 | Pescar 0.10 |
+| Mion | Explorador | -Coragem +Ambição +Empatia +Curiosidade -Agressividade +Lealdade +Sociabilidade | fome 0.15, comida 0.0, moedas 10.1 | Cortar lenha 0.27 | Explorar 0.22 | Pescar 0.10 |
 
 ## O que cada NPC iniciou nas 36 horas seguintes à escassez
 

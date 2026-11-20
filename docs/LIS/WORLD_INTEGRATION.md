@@ -20,10 +20,10 @@ O Marco 02 (`claude/marco-02-graficos`) não muda esse contrato. Ele apenas acre
 1. **`OnBlockChanged(change)`:** só enfileira a mudança. Pode ser chamado no callback da thread de jogo, como recomenda `docs/LIS_INTEGRATION.md`.
 2. **`Flush(sim)`:**
    - associa cada mudança ao local mais próximo dentro de `PlaceRadiusCells` (64); o resto é ignorado e contado;
-   - classifica os blocos com `Classify`;
+   - classifica os blocos com `Classify`; ar (id 0) e água contam como espaço vazio, então tirar um bloco deixando água e colocar um bloco na água também são eventos;
    - agrupa por local, tipo (removido ou colocado), recurso e autor;
    - reduz o estoque abstrato: madeira na Floresta e plantação nos Campos, à razão de `BlocksPerUnit` blocos por unidade;
-   - emite um evento LIS por grupo com `EmitAtCell`, de modo que só percebem os NPCs presentes no local cuja âncora esteja a até 48 células da mudança.
+   - emite um evento LIS por grupo com `EmitAtCell`, usando a mudança do grupo mais próxima da âncora, de modo que só percebem os NPCs presentes no local cuja âncora esteja a até 48 células da mudança.
 
 Uma remoção de madeira percebida pelo lenhador daquele local reduz sua crença sobre o estoque. Ela também tem relevância e valência fortes, eleva a necessidade de propósito e gera ressentimento pelo autor, se conhecido. Tudo isso altera as próximas decisões e pode alterar o objetivo na reavaliação diária. O teste 11 e o experimento Elden cobrem esse fluxo com eventos simulados. Em Elden, três lenhadores e dois outros NPCs viram o corte; dois pescadores e um explorador souberam por conversa.
 

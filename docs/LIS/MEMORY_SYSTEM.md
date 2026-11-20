@@ -30,7 +30,7 @@ Não há conhecimento global instantâneo. No experimento, ninguém sabia das fr
 
 ## Transmissão
 
-Ao conviver, cada NPC conta ao outro até duas memórias recentes (até 96 horas), as mais relevantes que o ouvinte ainda não tem. O ouvinte recebe a versão de quem contou, com confiança igual à confiança de quem contou × (0,3 + 0,6 × confiança no falante). Boatos têm metade do efeito de algo visto e ainda são escalados pela confiança. Isso vale para risco, estoques e relações com terceiros.
+Ao conviver, cada NPC conta ao outro até duas memórias recentes (até 96 horas), as mais relevantes que o ouvinte ainda não tem. O ouvinte recebe a versão de quem contou, com confiança igual à confiança de quem contou × (0,3 + 0,6 × confiança no falante). Boatos têm metade do efeito de algo visto e ainda são escalados pela confiança. Isso vale para risco, estoques e relações com terceiros. Um boato mais antigo que a última observação do local não altera a crença sobre o estoque.
 
 ## Interpretação individual
 
@@ -40,4 +40,4 @@ A relevância parte de um valor por tipo e aumenta se o NPC esteve envolvido, se
 
 ## Esquecimento
 
-Cada NPC guarda até `MemoryCapacity` memórias (48). Ao exceder, esquece a de menor `relevância × confiança / (1 + idade/72h)`. Em 20 dias de Elden foram formadas 1266 memórias, esquecidas 337 e mantidas 929.
+Cada NPC guarda até `MemoryCapacity` memórias (48). Ao exceder, esquece a de menor `relevância × confiança / (1 + idade/72h)`. Se a memória esquecida ainda pode ser recontada (evento com até 96 horas), o NPC guarda só o id do evento em `Forgotten`. Assim, ouvir o mesmo fato de novo não reaplica risco nem efeitos sobre relações. Em 20 dias de Elden foram formadas 1266 memórias, esquecidas 337 e mantidas 929.

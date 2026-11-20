@@ -31,6 +31,7 @@ O peso é 1 para o que foi visto e 0,5 × confiança para o que foi ouvido. A as
 
 ## Ajuda e conflito emergentes
 
+- **A quem pedir:** só a alguém por quem o NPC tem confiança + afeto − ressentimento acima de 1, o valor de uma relação neutra.
 - **Ajuda pedida:** quem é solicitado decide pela empatia, pelo afeto e pela confiança no solicitante, pela lealdade, pela ambição (que reduz) e pelo ressentimento (que reduz). Só ajuda se tiver comida sobrando.
 - **Ajuda espontânea:** surge da utilidade quando um NPC empático vê alguém faminto.
 - **Conflito:** pode ocorrer ao conviver, quando o NPC sente ressentimento acima de 0,45 e tem agressividade alta.
