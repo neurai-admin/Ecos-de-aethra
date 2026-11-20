@@ -76,7 +76,8 @@ int32 FLisVoxelAdapter::Flush(FLisSimulation& Sim)
         FLisPlaceState& State = Sim.World.Place(G.Place);
         const bool bStockResource = (G.Resource == ELisVoxelResource::Wood && G.Place == ELisPlace::Forest)
             || (G.Resource == ELisVoxelResource::Crop && G.Place == ELisPlace::Fields);
-        if (G.Type == ELisEvent::ResourceRemoved && bStockResource)
+        // NPC edits come from LIS actions whose outcome already changed the abstract stock.
+        if (G.Type == ELisEvent::ResourceRemoved && bStockResource && G.Actor <= LisNobody)
         {
             State.Stock = FMath::Max(0.f, State.Stock - Units);
         }

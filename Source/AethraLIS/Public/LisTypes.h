@@ -16,7 +16,9 @@ enum class ELisGoal : uint8 { Survive, MasterCraft, Prosper, SupportCommunity, D
 enum class ELisEvent : uint8
 {
     FoodShortage, ResourceFound, ResourceDepleted, ResourceRemoved, BlockPlaced,
-    HelpGiven, HelpRefused, TradeSucceeded, TradeFailed, Conflict, Danger, DangerRepelled, GoalChanged, Count
+    HelpGiven, HelpRefused, TradeSucceeded, TradeFailed, Conflict, Danger, DangerRepelled, GoalChanged,
+    Arrived, Met, // LIS 02: reported by the 3D world (save version 3)
+    Count
 };
 enum class ELisSource : uint8 { Observed, Told };
 enum class ELisTier : uint8 { Near, Mid, Far };

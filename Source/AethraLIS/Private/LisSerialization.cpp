@@ -172,6 +172,10 @@ void FLisSimulation::Serialize(FArchive& Ar)
     Ar << Config.MaxDecisionsPerTick << Config.MemoryCapacity << Config.EventLogCapacity << Config.MidThinkHours << Config.FarStepHours
        << Config.NearRadius << Config.MidRadius << Config.PerceptionRadiusCells;
     SerEnum(Ar, Config.Focus);
+    if (Version >= 3)
+    {
+        Ar << Config.bExternalTravel;
+    }
     // These are divisors, capacities and budgets: zero or negative values would crash the next Tick.
     if (Ar.IsLoading() && (Config.MaxDecisionsPerTick < 0 || Config.MemoryCapacity < 1 || Config.EventLogCapacity < 1
         || Config.MidThinkHours < 1 || Config.FarStepHours < 1))
