@@ -54,7 +54,7 @@ O código fica em `FAethraLisVillage::Plan` e segue quatro passos:
 - **Sem memória falsa:** a construção e o trabalho nos canteiros não viram memórias do LIS. O dano de outra pessoa a um bloco da vila vira o evento "Estrutura danificada", visto por quem está perto.
 - **Sem reconstrução automática:** um bloco da vila que o jogador quebra não é reconstruído. Os construtores vão inspecionar, mas não refazem nada sem uma regra de permissão, que ainda não existe.
 
-### Exceção só no mundo de demonstração (decisão para aprovação)
+### Exceção só no mundo de demonstração (aprovada em 20/11/2026)
 
 O gerador cobre de floresta praticamente toda a terra seca entre as alturas 21 e 60. Varri os seeds de 1 a 4.000: nenhum tem mais de 2 lotes abertos de 7×7 perto do spawn. Seguindo a regra estrita, a vila não cabe em seed nenhum.
 
@@ -64,7 +64,7 @@ Por isso, só no mundo de demonstração isolado (`bDemoVillage`), a vila derrub
 - **Reversível:** as árvores ficam registradas e `RemoveVillage` as faz crescer de novo.
 - **Mundos normais:** a regra estrita continua valendo, e na seed 42819 a vila não é construída.
 
-Essa exceção interpreta a autorização "se necessário, utilize um mundo ou seed específica de demonstração". Precisa da sua aprovação.
+Essa exceção interpreta a autorização "se necessário, utilize um mundo ou seed específica de demonstração" e foi aprovada pelo diretor criativo em 20/11/2026.
 
 ## Persistência
 
