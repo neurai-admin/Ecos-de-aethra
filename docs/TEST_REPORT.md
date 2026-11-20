@@ -47,6 +47,8 @@ Na execução corrigida, o 1% de frames mais lentos teve 14,91 ms de Game Thread
 | Corrigido `Profile(20261119_175023).csv` | `ac74ec79cbfbf6abd12fdac5090f22a8e97237442d6ff11e0dedeec5f1177879` |
 | Original `Profile(20261119_175125).csv` | `de63db40988e5c80ca8444f53ed8265abf429a8165b4549c899638ec26a3c5b2` |
 
+A revisão dos CSVs confirmou 32,11 s de tempo real de frames no pacote corrigido e 32,17 s no original. Os 60 s acima descrevem o tempo da rota simulada. Para uma captura de 60 s reais, a opção `-RealTime` desliga o passo fixo e o resumo imprime a duração observada. Essa captura ainda está pendente. A rota executa no mesmo mapa e seed, com controle por tempo de jogo e pequenas variações de trajetória conforme o tempo de frame.
+
 Na worktree de correções, execute a partir da raiz.
 
 ```powershell
@@ -54,7 +56,15 @@ Na worktree de correções, execute a partir da raiz.
 $exe = (Resolve-Path .\Builds\Marco02Correcoes\Windows\EcosDeAethra.exe).Path
 & .\Tools\Bench\bench.ps1 -Name warmup -Seconds 10 -Exe $exe
 & .\Tools\Bench\bench.ps1 -Name medicao -Seconds 60 -Exe $exe
+& .\Tools\Bench\bench.ps1 -Name medicao-tempo-real -Seconds 60 -RealTime -Exe $exe
 ```
+
+### Evidências reconferidas
+
+- O valor do AFS aparece nas pontas de `origin/main`, `origin/claude/marco-02-graficos` e `origin/claude/lis-core-01` registradas no clone local, em 21 commits únicos alcançáveis por essas três referências. Ele protege a inicialização do servidor de arquivos de builds Android com AFS. O risco é nulo para o executável Windows e condicional para APKs que ainda incorporem o valor. Trate-o como exposto e substitua APKs de desenvolvimento que ainda o aceitem, se existirem. A correção atual remove o valor da árvore proposta e preserva o histórico.
+- `Saved/Logs/EcosDeAethra-backup-2026.11.19-20.44.28.log` registra seis sucessos `Aethra.Voxel`, nas linhas 2104 a 2156.
+- Na execução original do UAT, `Cook-2026.11.19-17.47.58.txt` registra `Done!` na linha 1955 e `LogExit: Exiting.` na linha 1995. O `Log.txt` do UAT registra o cook com código 0 na linha 843 e a operação completa com código 0 na linha 1949.
+- O SHA-256 do executável e os hashes dos dois CSVs foram reconferidos. A tentativa de executar o pacote diretamente na sessão restrita atual falhou na inicialização (código 777003). Isso também deixou pendentes os testes manuais de teclado e mouse no pacote corrigido e a carga das cópias dos saves do Marco 01. A execução histórica da rota e os seis sucessos acima são de uma sessão anterior.
 
 ## Ambiente observado
 

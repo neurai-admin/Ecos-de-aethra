@@ -20,3 +20,4 @@
 | Diretório por execução de benchmark | O nome é um rótulo simples e cada captura recebe carimbo de tempo UTC e identificador único. `Saved` e `Bench` devem ser diretórios físicos. As capturas anteriores são preservadas. |
 | Atualização de oclusão ao editar cantos | Uma edição em canto refaz as malhas carregadas no quadrado de quatro chunks que compartilham o vértice. Ao retornar à área, as malhas são montadas a partir das edições salvas. |
 | Métrica de geração dos chunks | `ChunkGenerate` mede as colunas e a aplicação das edições aos blocos densos. `ChunkMesh` ainda inclui `ChunkUpload`. Os contadores aninhados devem ser lidos considerando essa sobreposição. |
+| Duração da captura de benchmark | O modo padrão preserva o passo fixo de 60 Hz para séries comparáveis. `-RealTime` usa o passo variável e o resumo do CSV mostra o tempo medido. Confirme a duração antes de comparar resultados. |
