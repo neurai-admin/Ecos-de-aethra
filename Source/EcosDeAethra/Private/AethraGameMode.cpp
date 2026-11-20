@@ -3,6 +3,7 @@
 #include "AethraCharacter.h"
 #include "AethraHUD.h"
 #include "AethraVoxelWorld.h"
+#include "VisualWorld/AethraVisualWorld.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Engine/DirectionalLight.h"
@@ -50,15 +51,61 @@ AAethraVoxelWorld* AAethraGameMode::EnsureVoxelWorld()
     return VoxelWorld.Get();
 }
 
+bool AAethraGameMode::IsVisualWorld()
+{
+    return FParse::Param(FCommandLine::Get(), TEXT("AethraVisualWorld")) || FCommandLine::Get() && FCString::Strifind(FCommandLine::Get(), TEXT("-AethraVisualWorld="));
+}
+
+AAethraVisualWorld* AAethraGameMode::EnsureVisualWorld()
+{
+    if (!VisualWorld)
+    {
+        // Visual World prototype 01: its own generator and saves; the voxel world is not created.
+        int32 Seed = AAethraVisualWorld::DemoSeed;
+        FParse::Value(FCommandLine::Get(), TEXT("AethraVisualWorld="), Seed);
+        VisualWorld = GetWorld()->SpawnActor<AAethraVisualWorld>();
+        if (VisualWorld)
+        {
+            VisualWorld->Start(Seed, FVector::ZeroVector);
+        }
+    }
+    return VisualWorld.Get();
+}
+
 void AAethraGameMode::StartPlay()
 {
-    EnsureVoxelWorld();
+    if (IsVisualWorld())
+    {
+        EnsureVisualWorld();
+    }
+    else
+    {
+        EnsureVoxelWorld();
+    }
     SpawnLighting();
     Super::StartPlay();
 }
 
 AActor* AAethraGameMode::ChoosePlayerStart_Implementation(AController* Player)
 {
+    if (IsVisualWorld())
+    {
+        if (AAethraVisualWorld* Visual = EnsureVisualWorld())
+        {
+            FActorSpawnParameters Params;
+            Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+            Params.ObjectFlags |= RF_Transient;
+            if (!VoxelStart)
+            {
+                VoxelStart = GetWorld()->SpawnActor<APlayerStart>(Visual->SpawnLocation(), FRotator(0, 40, 0), Params);
+            }
+            if (VoxelStart)
+            {
+                return VoxelStart.Get();
+            }
+        }
+        return Super::ChoosePlayerStart_Implementation(Player);
+    }
     if (AAethraVoxelWorld* Terrain = EnsureVoxelWorld())
     {
         const FVector Start = Terrain->PrepareSpawn();

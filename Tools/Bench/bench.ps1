@@ -9,7 +9,9 @@ param(
     [ValidateSet('', '-dpcvars=aethra.Horizon=0', '-dpcvars=aethra.Horizon=1')][string]$Extra = '',
     [string]$Exe = 'D:\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe',
     [string]$Project = '',
-    [switch]$RealTime
+    [switch]$RealTime,
+    # The Visual World prototype instead of the voxel world (its own flight route over the river plain).
+    [switch]$VisualWorld
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'bench-output.ps1')
@@ -34,6 +36,7 @@ $arguments += '-windowed', '-ResX=1920', '-ResY=1080', '-ForceRes', '-nosound',
     "-userdir=`"$out`"", "-abslog=`"$out\run.log`"", "-AethraBench=$Seconds", '"-ExecCmds=r.VSync 0, t.MaxFPS 0"'
 if (-not $RealTime) { $arguments += '-benchmark', '-fps=60' }
 if ($Extra) { $arguments += $Extra }
+if ($VisualWorld) { $arguments += '-AethraVisualWorld' }
 
 $process = Start-Process -FilePath $exeFile.FullName -ArgumentList $arguments -PassThru
 if (-not $process.WaitForExit(($Seconds + 180) * 1000)) {

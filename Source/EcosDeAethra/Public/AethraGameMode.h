@@ -4,6 +4,7 @@
 #include "AethraGameMode.generated.h"
 
 class AAethraVoxelWorld;
+class AAethraVisualWorld;
 class APlayerStart;
 class UMaterialInterface;
 
@@ -17,6 +18,8 @@ public:
     virtual void StartPlay() override;
     virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
     AAethraVoxelWorld* GetVoxelWorld() const;
+    // -AethraVisualWorld[=seed]: the Visual World prototype instead of the voxel world.
+    static bool IsVisualWorld();
 
 private:
     UPROPERTY(Transient)
@@ -24,6 +27,11 @@ private:
 
     UPROPERTY(Transient)
     TObjectPtr<APlayerStart> VoxelStart;
+
+    UPROPERTY(Transient)
+    TObjectPtr<AAethraVisualWorld> VisualWorld;
+
+    AAethraVisualWorld* EnsureVisualWorld();
 
     // Hard reference so the cooker packages the engine cloud material.
     UPROPERTY()

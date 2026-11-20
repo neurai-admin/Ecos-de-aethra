@@ -6,6 +6,6 @@ public class EcosDeAethra : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine" });
-        PrivateDependencyModuleNames.AddRange(new[] { "InputCore", "ProceduralMeshComponent" });
+        PrivateDependencyModuleNames.AddRange(new[] { "InputCore", "ProceduralMeshComponent", "MeshDescription", "StaticMeshDescription" });
     }
 }
