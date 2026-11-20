@@ -55,6 +55,19 @@ TArray<FAmeMaterialDef> BuildLibrary()
     Add(S::OreCopper, TEXT("OreCopper"), C::Resource, Srgb(120, 116, 110), Srgb(196, 112, 60), .15f, .7f, .3f, P::Ore, 3.f, .1f);
     Add(S::OreIron, TEXT("OreIron"), C::Resource, Srgb(118, 112, 106), Srgb(150, 86, 62), .15f, .72f, .2f, P::Ore, 3.f, .1f);
     Add(S::Crystal, TEXT("Crystal"), C::Resource, Srgb(140, 210, 230), Srgb(220, 250, 255), .1f, .15f, 0, P::Ore, 1.f, 0);
+    // Petals are matte and veined (Leaves pattern), never glossy: the anti-plastic rule.
+    Add(S::PetalSunflower, TEXT("PetalSunflower"), C::Vegetation, Srgb(232, 168, 28), Srgb(214, 120, 18), .2f, .7f, 0, P::Leaves, 6.f, 0);
+    Add(S::SunflowerDisk, TEXT("SunflowerDisk"), C::Vegetation, Srgb(70, 44, 22), Srgb(112, 80, 30), .15f, .9f, 0, P::Gravel, 12.f, 0);
+    Add(S::PetalRose, TEXT("PetalRose"), C::Vegetation, Srgb(176, 30, 52), Srgb(214, 76, 96), .2f, .62f, 0, P::Leaves, 6.f, 0);
+    Add(S::PetalLavender, TEXT("PetalLavender"), C::Vegetation, Srgb(120, 92, 186), Srgb(150, 120, 206), .25f, .75f, 0, P::Speckle, 8.f, 0);
+    Add(S::PetalDaisy, TEXT("PetalDaisy"), C::Vegetation, Srgb(236, 232, 220), Srgb(240, 196, 60), .1f, .7f, 0, P::Leaves, 8.f, 0);
+    Add(S::PetalPoppy, TEXT("PetalPoppy"), C::Vegetation, Srgb(210, 46, 26), Srgb(150, 24, 18), .15f, .65f, 0, P::Leaves, 6.f, 0);
+    Add(S::PetalAlpine, TEXT("PetalAlpine"), C::Vegetation, Srgb(52, 86, 200), Srgb(110, 140, 230), .2f, .7f, 0, P::Leaves, 8.f, 0);
+    Add(S::Fern, TEXT("Fern"), C::Vegetation, Srgb(58, 112, 40), Srgb(92, 140, 52), .3f, .8f, 0, P::Leaves, 4.f, 0);
+    Add(S::Aetherite, TEXT("Aetherite"), C::Resource, Srgb(60, 196, 186), Srgb(170, 250, 240), .15f, .3f, 0, P::Ore, 1.5f, 0);
+    Add(S::GlowMoss, TEXT("GlowMoss"), C::Vegetation, Srgb(70, 140, 120), Srgb(140, 230, 190), .3f, .9f, 0, P::Moss, 3.f, 0);
+    L[static_cast<int32>(S::Aetherite)].Glow = 2.5f;
+    L[static_cast<int32>(S::GlowMoss)].Glow = .8f;
     return L;
 }
 
@@ -127,6 +140,21 @@ TArray<FString> FAmeRegistry::Validate()
     return Problems;
 }
 
+float FAmeRegistry::BumpCm(const FAmeMaterialDef& D)
+{
+    // Relief depth of the procedural bump: masonry joints and rock are deep, soil and grass grainy,
+    // snow, plaster and metal nearly smooth (but never perfectly smooth).
+    switch (D.Pattern)
+    {
+    case EAmePattern::CutStone: case EAmePattern::Brick: case EAmePattern::Tiles: case EAmePattern::Columns: return 2.2f;
+    case EAmePattern::Strata: case EAmePattern::Speckle: case EAmePattern::Ore: return 1.8f;
+    case EAmePattern::Bark: case EAmePattern::Planks: return 1.4f;
+    case EAmePattern::Gravel: case EAmePattern::Moss: case EAmePattern::Leaves: return 1.1f;
+    case EAmePattern::Grass: case EAmePattern::Meadow: case EAmePattern::Noise: case EAmePattern::Sand: return .7f;
+    default: return .3f; // Snow, Plaster, Metal
+    }
+}
+
 UTexture2D* FAmeRegistry::CreatePalette(UObject* Outer)
 {
     UTexture2D* Texture = UTexture2D::CreateTransient(PaletteWidth, PaletteRows, PF_A32B32G32R32F, TEXT("AmePalette"));
@@ -148,7 +176,7 @@ UTexture2D* FAmeRegistry::CreatePalette(UObject* Outer)
         Texels[0 * PaletteWidth + X] = FLinearColor(D.Base.R, D.Base.G, D.Base.B, D.Variation);
         Texels[1 * PaletteWidth + X] = FLinearColor(D.Accent.R, D.Accent.G, D.Accent.B, D.Wear);
         Texels[2 * PaletteWidth + X] = FLinearColor(D.Roughness, D.Metallic, static_cast<float>(D.Pattern), D.PatternScale);
-        Texels[3 * PaletteWidth + X] = FLinearColor(static_cast<float>(D.Category), 0.f, 0.f, 1.f);
+        Texels[3 * PaletteWidth + X] = FLinearColor(static_cast<float>(D.Category), FAmeRegistry::BumpCm(D), D.Glow, 1.f);
     }
     Mip.BulkData.Unlock();
     Texture->UpdateResource();

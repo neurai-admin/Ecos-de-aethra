@@ -5,7 +5,6 @@
 #include "HAL/FileManager.h"
 #include "Materials/MaterialInterface.h"
 #include "MeshDescription.h"
-#include "PhysicsEngine/BodySetup.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/MemoryReader.h"
 #include "Serialization/MemoryWriter.h"
@@ -59,16 +58,16 @@ void FAhgMeshBuilder::Box(const FVector3f& Lo, const FVector3f& Hi)
     Quad(P[3], P[0], P[4], P[7]); // -x
 }
 
-void FAhgMeshBuilder::Cylinder(const FVector3f& Base, float Radius, float Height, int32 Sides, bool bCaps, float TopRadius)
+void FAhgMeshBuilder::Cylinder(const FVector3f& Base, float Radius, float Length, int32 Sides, bool bCaps, float TopRadius)
 {
     const float R1 = TopRadius < 0.f ? Radius : TopRadius;
-    const float Slope = (Radius - R1) / FMath::Max(Height, 1e-3f);
+    const float Slope = (Radius - R1) / FMath::Max(Length, 1e-3f);
     for (int32 I = 0; I < Sides; ++I)
     {
         const float A0 = 2.f * PI * I / Sides, A1 = 2.f * PI * (I + 1) / Sides;
         const FVector3f D0(FMath::Cos(A0), FMath::Sin(A0), 0.f), D1(FMath::Cos(A1), FMath::Sin(A1), 0.f);
         const FVector3f B0 = Base + D0 * Radius, B1 = Base + D1 * Radius;
-        const FVector3f T0 = Base + D0 * R1 + FVector3f(0, 0, Height), T1 = Base + D1 * R1 + FVector3f(0, 0, Height);
+        const FVector3f T0 = Base + D0 * R1 + FVector3f(0, 0, Length), T1 = Base + D1 * R1 + FVector3f(0, 0, Length);
         const FVector3f N0 = (D0 + FVector3f(0, 0, Slope)).GetSafeNormal(), N1 = (D1 + FVector3f(0, 0, Slope)).GetSafeNormal();
         if (R1 > 1e-3f)
         {
@@ -84,7 +83,7 @@ void FAhgMeshBuilder::Cylinder(const FVector3f& Base, float Radius, float Height
             Tri(Base, B1, B0);
             if (R1 > 1e-3f)
             {
-                Tri(Base + FVector3f(0, 0, Height), T0, T1);
+                Tri(Base + FVector3f(0, 0, Length), T0, T1);
             }
         }
     }
@@ -356,11 +355,6 @@ UStaticMesh* FAhgShapes::MakeMesh(UObject* Outer, const FName& Name, FMeshDescri
     Params.bAllowCpuAccess = bCollision; // physics reads the 13 small AHG meshes on the CPU; vegetation stays GPU-only
     TArray<const FMeshDescription*> Lods = { &Description };
     Mesh->BuildFromMeshDescriptions(Lods, Params);
-    if (bCollision && Mesh->GetBodySetup())
-    {
-        // The simple box is the collision for every query: no triangle data is kept on the CPU.
-        Mesh->GetBodySetup()->CollisionTraceFlag = CTF_UseSimpleAsComplex;
-    }
     return Mesh;
 }
 

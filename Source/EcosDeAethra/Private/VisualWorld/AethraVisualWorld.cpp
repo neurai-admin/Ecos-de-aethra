@@ -2,6 +2,7 @@
 
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Engine/ExponentialHeightFog.h"
 #include "Engine/PostProcessVolume.h"
@@ -18,6 +19,7 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
+#include "Async/Async.h"
 #include "Async/ParallelFor.h"
 #include "HAL/PlatformTime.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -33,8 +35,9 @@ DEFINE_LOG_CATEGORY_STATIC(LogAethraVW, Log, All);
 namespace
 {
 TAutoConsoleVariable<float> CVarHour(TEXT("aethra.vw.Hour"), 16.f, TEXT("Visual World time of day, 0-24 (16 = warm afternoon light)."));
+TAutoConsoleVariable<int32> CVarShowHorizon(TEXT("aethra.vw.ShowHorizon"), 1, TEXT("Debug: 0 hides the far horizon tiles."));
+TAutoConsoleVariable<int32> CVarQuality(TEXT("aethra.vw.Quality"), 2, TEXT("Visual World graphics profile: 0 Low, 1 Medium, 2 High, 3 Ultra."));
 
-enum EVegetation : int32 { GrassClump, Flower, VegetationCount }; // trees come from the species system
 
 uint32 Mix(uint32 H)
 {
@@ -105,53 +108,28 @@ void AAethraVisualWorld::MakeVegetationMeshes()
     // Trees: one mesh per species of the flora system (blocky, conical, angular or, for rare trees,
     // organic). Grass and flowers below. Surfaces come from the AME palette (ids in UV1).
     const int32 Seed = World->GetSeed();
-    auto Finish = [this](FAhgMeshBuilder& B, const TCHAR* Name, UMaterialInterface* Material)
+    auto Make = [this](FAhgMeshBuilder& B, const FString& Name, UMaterialInterface* Material)
     {
         FMeshDescription Description;
         B.ToMeshDescription(Description);
-        VegetationMeshes.Add(FAhgShapes::MakeMesh(this, Name, Description, Material, false));
+        return FAhgShapes::MakeMesh(this, *Name, Description, Material, false);
     };
+    // Trees: Variants meshes per species (index = species * Variants + variant).
     for (const FFloraSpecies& Species : FFloraRegistry::All())
     {
-        FAhgMeshBuilder B;
-        FFloraRegistry::BuildMesh(Species, Seed, B);
-        FMeshDescription Description;
-        B.ToMeshDescription(Description);
-        SpeciesMeshes.Add(FAhgShapes::MakeMesh(this, *FString::Printf(TEXT("SM_VW_Flora_%d"), static_cast<int32>(Species.Id)), Description, SurfaceMaterial, false));
-    }
-    {
-        // Grass clump: thin bent blades; vertex colour R = height along the blade (wind weight).
-        FAhgMeshBuilder B;
-        B.Surface = Id(EAmeSurface::Grass);
-        for (int32 I = 0; I < 9; ++I)
+        for (int32 V = 0; V < FFloraRegistry::Variants; ++V)
         {
-            const float A = I * 2.4f, R = 8.f + 9.f * (I % 3);
-            const FVector3f Root(R * FMath::Cos(A), R * FMath::Sin(A), -2.f);
-            const FVector3f Side(-FMath::Sin(A) * 3.5f, FMath::Cos(A) * 3.5f, 0.f);
-            const float H = 38.f + 7.f * (I % 4);
-            const FVector3f Tip = Root + FVector3f(FMath::Cos(A) * 14.f, FMath::Sin(A) * 14.f, H);
-            B.Color = FLinearColor(0, 0, 0, 1);
-            B.Tri(Root - Side, Root + Side, Tip);
-            B.Verts.Last().Color = FLinearColor(1, 0, 0, 1);
+            FAhgMeshBuilder B;
+            FFloraRegistry::BuildMesh(Species, Seed, V, B);
+            SpeciesMeshes.Add(Make(B, FString::Printf(TEXT("SM_VW_Tree_%d_%d"), static_cast<int32>(Species.Id), V), SurfaceMaterial));
         }
-        Finish(B, TEXT("SM_VW_Grass"), FoliageMaterial);
     }
+    // Ground flora: one mesh per species (grass uses the light foliage material).
+    for (const FGroundSpecies& Species : FFloraGen::Ground())
     {
-        // Flower: a few blades and a head; the head's colour comes from the instance (custom data 1).
         FAhgMeshBuilder B;
-        B.Surface = Id(EAmeSurface::Grass);
-        for (int32 I = 0; I < 4; ++I)
-        {
-            const float A = I * 1.7f;
-            const FVector3f Root(6.f * FMath::Cos(A), 6.f * FMath::Sin(A), -2.f), Side(-FMath::Sin(A) * 3.f, FMath::Cos(A) * 3.f, 0.f);
-            B.Color = FLinearColor(0, 0, 0, 1);
-            B.Tri(Root - Side, Root + Side, Root + FVector3f(FMath::Cos(A) * 8.f, FMath::Sin(A) * 8.f, 30.f));
-            B.Verts.Last().Color = FLinearColor(1, 0, 0, 1);
-        }
-        B.Surface = Id(EAmeSurface::Meadow);
-        B.Color = FLinearColor(1, 1, 0, 1); // G = 1 marks the petals
-        B.Sphere(FVector3f(0, 0, 42), FVector3f(8, 8, 5), 3, 6);
-        Finish(B, TEXT("SM_VW_Flower"), FoliageMaterial);
+        FFloraGen::BuildMesh(Species, Seed, B);
+        GroundMeshes.Add(Make(B, FString::Printf(TEXT("SM_VW_Ground_%d"), static_cast<int32>(Species.Id)), Species.bFoliageMaterial ? FoliageMaterial : SurfaceMaterial));
     }
     for (int32 S = 0; S < static_cast<int32>(EAhgShape::Count); ++S)
     {
@@ -169,6 +147,10 @@ void AAethraVisualWorld::Start(int32 Seed, const FVector& ViewerAt, const FStrin
         ? FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("VisualWorld"), FString::Printf(TEXT("Pieces_%d.ahg"), Seed))
         : PiecesFile;
     PlanSettlement(); // adds flat pads to the generator before any terrain is built
+    Caves = MakeUnique<FAethraCaveGen>(*World, bHasSettlement ? SettlementCenter : FVector2D::ZeroVector);
+    CavePath = FPaths::Combine(FPaths::GetPath(PiecesPath), FPaths::GetBaseFilename(PiecesPath) + TEXT(".caves"));
+    Caves->LoadEdits(CavePath); // none yet = untouched
+    Ruins = MakeUnique<FAethraRuinGen>(*World, Caves.Get(), bHasSettlement ? SettlementCenter : FVector2D::ZeroVector);
     MakeMaterials();
     MakeVegetationMeshes();
     FloraPath = FPaths::Combine(FPaths::GetPath(PiecesPath), FPaths::GetBaseFilename(PiecesPath) + TEXT(".flora"));
@@ -179,9 +161,13 @@ void AAethraVisualWorld::Start(int32 Seed, const FVector& ViewerAt, const FStrin
         BuildSettlement();
     }
     ShowPieces();
-    BuildHorizon();
+    BuildRuins();
+    BuildCaveFeatures();
+    Quality = FMath::Clamp(CVarQuality.GetValueOnGameThread(), 0, 3);
+    ApplyProfileRendering();
     BuildFalls();
     UpdateStreaming(ViewerAt.IsNearlyZero() ? SpawnLocation() : ViewerAt, 12);
+    UpdateHorizon(LastViewerM, 1000); // every tile starts building in the background
     bShots = FParse::Param(FCommandLine::Get(), TEXT("AethraVWShots"));
     FParse::Value(FCommandLine::Get(), TEXT("AethraBench="), BenchSeconds);
     Counters.SetupMs = (FPlatformTime::Seconds() - Begin) * 1000.0;
@@ -409,7 +395,7 @@ void AAethraVisualWorld::ShowPieces()
         UInstancedStaticMeshComponent* C = NewObject<UInstancedStaticMeshComponent>(this);
         C->SetStaticMesh(ShapeMeshes[S]);
         C->SetMaterial(0, SurfaceMID);
-        C->NumCustomDataFloats = 2;
+        C->NumCustomDataFloats = 3; // 0 tint (wind phase), 1 surface override, 2 wind strength
         C->SetupAttachment(RootComponent);
         C->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
         C->RegisterComponent();
@@ -446,11 +432,13 @@ struct FSurfaceBuffers
 };
 
 void AddGridSurface(const FAethraWorldGen& Gen, FVector2D Origin, double StepM, int32 N, int32 Seed, FSurfaceBuffers& T, FSurfaceBuffers& W,
-    int32& WaterQuads, double SinkInsideM = -1.0, bool bSkirt = true)
+    int32& WaterQuads, double SinkInsideM = -1.0, bool bSkirt = true, TArray<FWorldSample>* OutSamples = nullptr, FVector2D SinkCenter = FVector2D::ZeroVector,
+    const FAethraCaveGen* Caves = nullptr, float SinkDepthM = 30.f)
 {
-    // Samples with one extra ring for normals.
+    // Samples with one extra ring for normals (kept for the ground flora when asked).
     const int32 M = N + 2;
-    TArray<FWorldSample> S;
+    TArray<FWorldSample> Local;
+    TArray<FWorldSample>& S = OutSamples ? *OutSamples : Local;
     S.SetNum(M * M);
     ParallelFor(M, [&](int32 J)
     {
@@ -471,9 +459,9 @@ void AddGridSurface(const FAethraWorldGen& Gen, FVector2D Origin, double StepM, 
             const float DY = (At(I, J + 1).Height - At(I, J - 1).Height) / (2.f * StepM);
             const FVector Normal = FVector(-DX, -DY, 1.f).GetSafeNormal();
             float H = C.Height;
-            if (SinkInsideM > 0.0 && P.Size() < SinkInsideM)
+            if (SinkInsideM > 0.0 && (P - SinkCenter).Size() < SinkInsideM)
             {
-                H -= 30.f; // horizon under the streamed terrain
+                H -= SinkDepthM; // horizon under the streamed terrain
             }
             T.Positions.Add(Cm(P, H));
             T.Normals.Add(Normal);
@@ -499,6 +487,15 @@ void AddGridSurface(const FAethraWorldGen& Gen, FVector2D Origin, double StepM, 
             const float Wet = FMath::Clamp(1.f - C.WaterDistance / 4.f, 0.f, 1.f);
             FLinearColor Albedo = FMath::Lerp(A.Base, B.Base, Choice.Blend) * Occlusion * FMath::Lerp(1.f, .62f, Wet);
             Albedo.A = FMath::Lerp(FMath::Lerp(A.Roughness, B.Roughness, Choice.Blend), .3f, Wet);
+            // Flower fields colour the ground at every distance (the flowers themselves are drawn near the
+            // viewer only), so a field reads the same from a mountain top and from inside it.
+            const FFieldSample Field = FFloraGen::FieldAt(Seed, P, FFloraEnvironment::From(C, FVector3f(Normal)));
+            if (Field.Strength > 0.f)
+            {
+                const float Alpha = Albedo.A;
+                Albedo = FMath::Lerp(Albedo, FFloraGen::FieldColor(Field.Field), Field.Strength * .55f);
+                Albedo.A = Alpha;
+            }
             T.Colors.Add(Albedo);
         }
     }
@@ -506,6 +503,10 @@ void AddGridSurface(const FAethraWorldGen& Gen, FVector2D Origin, double StepM, 
     {
         for (int32 I = 0; I + 1 < N; ++I)
         {
+            if (Caves && Caves->CoversColumn(Origin + FVector2D((I + .5) * StepM, (J + .5) * StepM), 2.0))
+            {
+                continue; // a cave or an excavation: the volume mesh draws this ground
+            }
             const int32 A = Base + J * N + I, B = A + 1, C = A + N, D = C + 1;
             T.Triangles.Append({ A, C, B, B, C, D });
         }
@@ -573,7 +574,7 @@ void AddGridSurface(const FAethraWorldGen& Gen, FVector2D Origin, double StepM, 
                 const float Depth = FMath::Max(Level - X.Height, 0.f);
                 // Dry corners dip under the bank, so the shoreline follows the terrain instead of the grid.
                 const float Z = X.Height >= Level ? FMath::Min(Level, X.Height - .3f) : Level;
-                W.Positions.Add(Cm(P, Z - (SinkInsideM > 0.0 && P.Size() < SinkInsideM ? 30.f : 0.f)));
+                W.Positions.Add(Cm(P, Z - (SinkInsideM > 0.0 && (P - SinkCenter).Size() < SinkInsideM ? SinkDepthM : 0.f)));
                 W.Normals.Add(FVector::UpVector);
                 W.UV0.Add(FVector2D(X.Flow.X, X.Flow.Y));
                 W.UV1.Add(FVector2D(Body, 0.f));
@@ -587,6 +588,13 @@ void AddGridSurface(const FAethraWorldGen& Gen, FVector2D Origin, double StepM, 
 }
 }
 
+struct FVwHorizonBuild
+{
+    FSurfaceBuffers T, W;
+    FVector2D SinkCenter = FVector2D::ZeroVector;
+    double StepM = 64.0;
+};
+
 void AAethraVisualWorld::BuildChunk(int32 Level, FIntPoint Coord, const FVector2D& ViewerM)
 {
     const double Begin = FPlatformTime::Seconds();
@@ -594,7 +602,10 @@ void AAethraVisualWorld::BuildChunk(int32 Level, FIntPoint Coord, const FVector2
     const int32 N = FMath::RoundToInt(Size / StepM) + 1;
     const FVector2D Origin(Coord.X * Size, Coord.Y * Size);
     FSurfaceBuffers T, W;
-    AddGridSurface(*World, Origin, StepM, N, World->GetSeed(), T, W, Counters.WaterQuads);
+    TArray<FWorldSample> Samples;
+    // Far chunks sit 0.4 m low: where they still overlap near chunks for a moment, the near ones win.
+    AddGridSurface(*World, Origin, StepM, N, World->GetSeed(), T, W, Counters.WaterQuads, Level == 1 ? 1e9 : -1.0, true, &Samples, FVector2D::ZeroVector,
+        Level == 0 ? Caves.Get() : nullptr, .4f);
 
     FVwChunk Chunk;
     Chunk.Mesh = NewObject<UProceduralMeshComponent>(this);
@@ -610,7 +621,7 @@ void AAethraVisualWorld::BuildChunk(int32 Level, FIntPoint Coord, const FVector2
     }
     Chunk.Mesh->RegisterComponent();
     Counters.Triangles += (T.Triangles.Num() + W.Triangles.Num()) / 3;
-    AddFoliage(Chunk, Level, Coord, ViewerM);
+    AddFoliage(Chunk, Level, Coord, ViewerM, &Samples);
     Chunks.Add(FIntVector(Coord.X, Coord.Y, Level), Chunk);
     ++Counters.Generated;
     const double Ms = (FPlatformTime::Seconds() - Begin) * 1000.0;
@@ -623,7 +634,7 @@ UHierarchicalInstancedStaticMeshComponent* AAethraVisualWorld::NewFoliage(UStati
 {
     UHierarchicalInstancedStaticMeshComponent* C = NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
     C->SetStaticMesh(Mesh);
-    C->NumCustomDataFloats = 2;
+    C->NumCustomDataFloats = 3; // 0 tint (wind phase), 1 surface override, 2 wind strength
     C->SetupAttachment(RootComponent);
     C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     C->SetCullDistances(static_cast<int32>(CullCm * .8f), static_cast<int32>(CullCm));
@@ -632,7 +643,7 @@ UHierarchicalInstancedStaticMeshComponent* AAethraVisualWorld::NewFoliage(UStati
     return C;
 }
 
-void AAethraVisualWorld::AddFoliage(FVwChunk& Chunk, int32 Level, FIntPoint Coord, const FVector2D& ViewerM)
+void AAethraVisualWorld::AddFoliage(FVwChunk& Chunk, int32 Level, FIntPoint Coord, const FVector2D& ViewerM, const TArray<FWorldSample>* Samples)
 {
     const int32 Seed = World->GetSeed();
     const double Size = ChunkSize[Level];
@@ -641,14 +652,15 @@ void AAethraVisualWorld::AddFoliage(FVwChunk& Chunk, int32 Level, FIntPoint Coor
     // Custom data: 0 tint (also the wind phase), 2 the species' wind strength.
     TArray<FFloraTree> Found;
     TreesIn(Level, Coord, Found);
-    const int32 SpeciesCount = static_cast<int32>(EFloraSpecies::Count);
+    const int32 SpeciesCount = static_cast<int32>(EFloraSpecies::Count) * FFloraRegistry::Variants;
     TArray<TArray<FTransform>> Trees;
     TArray<TArray<float>> Tints;
     Trees.SetNum(SpeciesCount);
     Tints.SetNum(SpeciesCount);
     for (const FFloraTree& T : Found)
     {
-        const int32 S = static_cast<int32>(T.Species);
+        // Far chunks draw every tree with variant 0 (same tree, simpler mesh set): a third of the draw calls.
+        const int32 S = static_cast<int32>(T.Species) * FFloraRegistry::Variants + (Level == 0 ? T.Variant : 0);
         Trees[S].Add(FTransform(FRotator(0, T.Yaw, 0), Cm(T.Position, T.Ground - .2f), FVector(T.Scale)));
         Tints[S].Add(T.Tint);
     }
@@ -658,10 +670,11 @@ void AAethraVisualWorld::AddFoliage(FVwChunk& Chunk, int32 Level, FIntPoint Coor
         {
             continue;
         }
-        const FFloraSpecies& Def = FFloraRegistry::All()[S];
-        // LOD: near chunks draw to the species' distance; far chunks to the horizon of the streamed area.
-        UHierarchicalInstancedStaticMeshComponent* C = NewFoliage(SpeciesMeshes[S], Level == 0 ? FMath::Min(Def.DrawDistance, 600.f) * 100.f : Def.DrawDistance * 100.f, true);
-        C->NumCustomDataFloats = 3;
+        const FFloraSpecies& Def = FFloraRegistry::All()[S / FFloraRegistry::Variants];
+        // LOD: near chunks draw to the species' distance, far chunks to the edge of the streamed area; far
+        // trees cast shadows only on the higher profiles.
+        const float Draw = (Level == 0 ? FMath::Min(Def.DrawDistance, 600.f) : Def.DrawDistance) * Profile().TreeDistance;
+        UHierarchicalInstancedStaticMeshComponent* C = NewFoliage(SpeciesMeshes[S], Draw * 100.f, Level == 0 || Profile().bFarTreeShadows);
         C->SetMaterial(0, SurfaceMID);
         C->RegisterComponent();
         C->AddInstances(Trees[S], false);
@@ -676,85 +689,319 @@ void AAethraVisualWorld::AddFoliage(FVwChunk& Chunk, int32 Level, FIntPoint Coor
     }
     Counters.Trees += Chunk.Trees;
 
-    // Grass and flowers only next to the viewer (they fade out by 120 m).
-    if (Level != 0 || (Origin + FVector2D(Size * .5, Size * .5) - ViewerM).Size() > 230.0)
+    // Ground flora (grass, ferns, flowers, flower fields) only next to the viewer, from the chunk's own
+    // terrain samples: no extra generator calls. Cells belong to the chunk holding their lower corner.
+    const FVwProfile& Q = Profile();
+    if (Level != 0 || !Samples || (Origin + FVector2D(Size * .5, Size * .5) - ViewerM).Size() > Q.GroundRadius)
     {
         return;
     }
-    TArray<FTransform> Grass, Flowers;
-    TArray<float> FlowerColour;
-    const double GCell = 1.7;
-    const int32 GCells = FMath::RoundToInt(Size / GCell);
-    for (int32 J = 0; J < GCells; ++J)
+    const double StepM = Step[0];
+    const int32 N = FMath::RoundToInt(Size / StepM) + 1, M = N + 2;
+    auto At = [&](int32 I, int32 J) -> const FWorldSample& { return (*Samples)[(FMath::Clamp(J, -1, N) + 1) * M + (FMath::Clamp(I, -1, N) + 1)]; };
+    const int32 GroundCount = static_cast<int32>(EGroundSpecies::Count);
+    TArray<TArray<FTransform>> Plants;
+    TArray<TArray<float>> PlantTints;
+    Plants.SetNum(GroundCount);
+    PlantTints.SetNum(GroundCount);
+    const double G = FFloraGen::GroundCell;
+    auto First = [Size, G](int32 C) { return FMath::CeilToInt(C * Size / G); };
+    for (int32 GY = First(Coord.Y); GY < First(Coord.Y + 1); ++GY)
     {
-        for (int32 I = 0; I < GCells; ++I)
+        for (int32 GX = First(Coord.X); GX < First(Coord.X + 1); ++GX)
         {
-            const int32 GX = FMath::FloorToInt(Origin.X / GCell) + I, GY = FMath::FloorToInt(Origin.Y / GCell) + J;
-            const FVector2D P(GX * GCell + Hash01(Seed, GX, GY, 11) * GCell, GY * GCell + Hash01(Seed, GX, GY, 12) * GCell);
-            const FWorldSample S = World->Sample(P);
-            const bool bGrassy = S.Biome == EAmeBiome::Plains || S.Biome == EAmeBiome::Meadow || S.Biome == EAmeBiome::Forest || S.Biome == EAmeBiome::RiverBank;
-            if (!bGrassy || S.IsWater() || S.WaterDistance < 1.f || (bHasSettlement && FVector2D::Distance(P, SettlementCenter) < 22.0))
+            if (Hash01(Seed, GX, GY, 19) > Q.GroundDensity)
+            {
+                continue; // lower profiles thin the ground flora evenly
+            }
+            const FVector2D P = FFloraGen::GroundPosition(Seed, FIntPoint(GX, GY));
+            if ((bHasSettlement && FVector2D::Distance(P, SettlementCenter) < 22.0) || (Caves && Caves->CoversColumn(P, 0.0)))
             {
                 continue;
             }
-            const float Roll = Hash01(Seed, GX, GY, 13);
-            const FTransform X(FRotator(0, 360.f * Hash01(Seed, GX, GY, 14), 0), Cm(P, S.Height), FVector(.8f + .5f * Hash01(Seed, GX, GY, 15)));
-            if (S.Biome == EAmeBiome::Meadow && Roll < .22f)
+            const double FI = (P.X - Origin.X) / StepM, FJ = (P.Y - Origin.Y) / StepM;
+            const int32 I = FMath::Clamp(FMath::FloorToInt(FI), 0, N - 2), J = FMath::Clamp(FMath::FloorToInt(FJ), 0, N - 2);
+            const float TX = static_cast<float>(FI - I), TY = static_cast<float>(FJ - J);
+            const FWorldSample& S = At(FMath::RoundToInt(FI), FMath::RoundToInt(FJ));
+            if (S.WaterDistance < 1.f)
             {
-                Flowers.Add(X);
-                FlowerColour.Add(1.f + FMath::FloorToFloat(Hash01(Seed, GX, GY, 16) * 4.f)); // 1..4: white, red, yellow, violet
+                continue;
             }
-            else if (Roll < (S.Biome == EAmeBiome::Forest ? .35f : .8f))
+            const float Ground = FMath::Lerp(FMath::Lerp(At(I, J).Height, At(I + 1, J).Height, TX), FMath::Lerp(At(I, J + 1).Height, At(I + 1, J + 1).Height, TX), TY);
+            const FVector3f Normal = FVector3f(-(At(I + 1, J).Height - At(I, J).Height) / StepM, -(At(I, J + 1).Height - At(I, J).Height) / StepM, 1.f).GetSafeNormal();
+            FGroundPlant Plant;
+            if (!FFloraGen::GroundAt(Seed, FIntPoint(GX, GY), FFloraEnvironment::From(S, Normal), Plant))
             {
-                Grass.Add(X);
+                continue;
             }
+            const int32 K = static_cast<int32>(Plant.Species);
+            Plants[K].Add(FTransform(FRotator(0, Plant.Yaw, 0), Cm(Plant.Position, Ground - .05f), FVector(Plant.Scale)));
+            PlantTints[K].Add(Plant.Tint);
         }
     }
-    if (Grass.Num())
+    for (int32 K = 0; K < GroundCount; ++K)
     {
-        UHierarchicalInstancedStaticMeshComponent* C = NewFoliage(VegetationMeshes[GrassClump], 12000.f, false);
-        C->SetMaterial(0, FoliageMID);
-        C->RegisterComponent();
-        C->AddInstances(Grass, false);
-        Chunk.Foliage.Add(C);
-    }
-    if (Flowers.Num())
-    {
-        UHierarchicalInstancedStaticMeshComponent* C = NewFoliage(VegetationMeshes[Flower], 12000.f, false);
-        C->SetMaterial(0, FoliageMID);
-        C->RegisterComponent();
-        C->AddInstances(Flowers, false);
-        for (int32 K = 0; K < Flowers.Num(); ++K)
+        if (!Plants[K].Num())
         {
-            C->SetCustomDataValue(K, 1, FlowerColour[K], false);
+            continue;
+        }
+        const FGroundSpecies& Def = FFloraGen::Ground()[K];
+        // Tall flowers (sunflowers) cast shadows on the higher profiles; low ground flora never (cost).
+        UHierarchicalInstancedStaticMeshComponent* C = NewFoliage(GroundMeshes[K], Def.DrawDistance * Q.GroundDistance * 100.f, Def.HeightMax > 1.f && Q.bGroundShadows);
+        C->SetMaterial(0, Def.bFoliageMaterial ? FoliageMID.Get() : SurfaceMID.Get());
+        C->RegisterComponent();
+        C->AddInstances(Plants[K], false);
+        for (int32 I = 0; I < Plants[K].Num(); ++I)
+        {
+            C->SetCustomDataValue(I, 0, PlantTints[K][I] * .6f, false);
+            C->SetCustomDataValue(I, 2, Def.Wind, false);
         }
         C->MarkRenderStateDirty();
         Chunk.Foliage.Add(C);
+        Chunk.Grass += Plants[K].Num();
     }
-    Chunk.Grass = Grass.Num() + Flowers.Num();
     Chunk.bGrass = true;
     Counters.Grass += Chunk.Grass;
 }
 
-void AAethraVisualWorld::BuildHorizon()
+// ------------------------------------------------------------------ profiles and the far horizon
+
+const FVwProfile& AAethraVisualWorld::ProfileFor(int32 Q)
 {
-    // 20 x 20 km at 64 m: the far mountains and the sea, sunk under the streamed area.
-    const double StepM = 64.0;
-    const int32 N = 313;
-    FSurfaceBuffers T, W;
-    int32 Quads = 0;
-    AddGridSurface(*World, FVector2D(-StepM * (N - 1) * .5, -StepM * (N - 1) * .5), StepM, N, World->GetSeed(), T, W, Quads, 1450.0, false);
-    Horizon = NewObject<UProceduralMeshComponent>(this);
-    Horizon->SetupAttachment(RootComponent);
-    Horizon->CreateMeshSection_LinearColor(0, T.Positions, T.Triangles, T.Normals, T.UV0, T.UV1, T.UV2, T.UV3, T.Colors, T.Tangents, false);
-    Horizon->SetMaterial(0, SurfaceMID);
-    if (W.Positions.Num())
+    static const FVwProfile Profiles[4] = {
+        //  name          near   far    km    ground dens  gdist tree  farSh  grSh   vfog   shadow casc res
+        { TEXT("Baixo"),  256.0, 1100.0,  8.f, 140.f, .45f, .6f,  .6f,  false, false, false,  80.f, 2, 1024 },
+        { TEXT("MÃ©dio"),  320.0, 1400.0, 12.f, 180.f, .7f,  .8f,  .8f,  false, false, false, 120.f, 3, 2048 },
+        { TEXT("Alto"),   384.0, 1600.0, 20.f, 230.f, 1.f,  1.f,  1.f,  true,  true,  true,  200.f, 3, 2048 },
+        { TEXT("Ultra"),  448.0, 2200.0, 32.f, 280.f, 1.f,  1.2f, 1.25f, true, true,  true,  300.f, 4, 4096 },
+    };
+    return Profiles[FMath::Clamp(Q, 0, 3)];
+}
+
+void AAethraVisualWorld::SetQuality(int32 NewQuality)
+{
+    NewQuality = FMath::Clamp(NewQuality, 0, 3);
+    const bool bChanged = NewQuality != Quality;
+    Quality = NewQuality;
+    ApplyProfileRendering();
+    if (bChanged && World)
     {
-        Horizon->CreateMeshSection_LinearColor(1, W.Positions, W.Triangles, W.Normals, W.UV0, W.UV1, W.UV2, W.UV3, W.Colors, W.Tangents, false);
-        Horizon->SetMaterial(1, HydroMID);
+        // Ground flora and draw distances belong to the chunks: rebuild them (streaming refills the
+        // nearest first); horizon tiles outside the new radius go at the next horizon update.
+        TArray<FIntVector> Keys;
+        Chunks.GetKeys(Keys);
+        for (const FIntVector& K : Keys)
+        {
+            DropChunk(K);
+        }
+        UpdateStreaming(FVector(LastViewerM.X * 100.0, LastViewerM.Y * 100.0, 0.0), 32);
     }
-    Horizon->SetCastShadow(false);
-    Horizon->RegisterComponent();
+}
+
+void AAethraVisualWorld::ApplyProfileRendering()
+{
+    const FVwProfile& Q = Profile();
+    auto SetInt = [](const TCHAR* Name, int32 Value)
+    {
+        if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(Name))
+        {
+            Var->Set(Value, ECVF_SetByCode);
+        }
+    };
+    SetInt(TEXT("r.VolumetricFog"), Q.bVolumetricFog ? 1 : 0);
+    SetInt(TEXT("r.Shadow.MaxCSMResolution"), Q.ShadowResolution);
+    if (UWorld* W = GetWorld())
+    {
+        for (TActorIterator<ADirectionalLight> It(W); It; ++It)
+        {
+            if (UDirectionalLightComponent* Light = Cast<UDirectionalLightComponent>(It->GetLightComponent()))
+            {
+                // Adaptive shadow quality: sharp cascades near the viewer, none for the far landscape.
+                Light->SetDynamicShadowDistanceMovableLight(Q.ShadowDistance * 100.f);
+                Light->SetDynamicShadowCascades(Q.Cascades);
+            }
+        }
+    }
+}
+
+void AAethraVisualWorld::LaunchHorizonTile(FIntPoint Tile, const FVector2D& ViewerM)
+{
+    if (HorizonJobs.Contains(Tile) || !World)
+    {
+        return;
+    }
+    const FVector2D Origin(Tile.X * HorizonTile, Tile.Y * HorizonTile);
+    const double Distance = (Origin + FVector2D(HorizonTile * .5, HorizonTile * .5) - ViewerM).Size();
+    const double StepM = Distance < 12000.0 ? 64.0 : 128.0;
+    const int32 N = FMath::RoundToInt(HorizonTile / StepM) + 1;
+    const FAethraWorldGen* Gen = World.Get();
+    const int32 Seed = World->GetSeed();
+    // The whole horizon sits 10 m under the true surface: hidden wherever real terrain is drawn (a coarse
+    // 64 m surface can rise a few metres above the real one in valleys), invisible at kilometres. No
+    // position-dependent sinking, so a tile never has to follow the viewer. Same WorldGen surface.
+    const double Sink = 1e9;
+    HorizonJobs.Add(Tile, Async(EAsyncExecution::ThreadPool, [Gen, Seed, Origin, StepM, N, Sink, ViewerM]()
+    {
+        TSharedPtr<FVwHorizonBuild> Build = MakeShared<FVwHorizonBuild>();
+        int32 Quads = 0;
+        AddGridSurface(*Gen, Origin, StepM, N, Seed, Build->T, Build->W, Quads, Sink, true, nullptr, ViewerM, nullptr, 10.f);
+        Build->SinkCenter = ViewerM;
+        Build->StepM = StepM;
+        return Build;
+    }));
+    ++Counters.HorizonBuilds;
+}
+
+void AAethraVisualWorld::ApplyHorizonTile(FIntPoint Tile, FVwHorizonBuild& Build)
+{
+    FVwHorizonTile& T = HorizonTiles.FindOrAdd(Tile);
+    if (!T.Mesh)
+    {
+        T.Mesh = NewObject<UProceduralMeshComponent>(this);
+        T.Mesh->SetupAttachment(RootComponent);
+        T.Mesh->SetCastShadow(false);
+        T.Mesh->RegisterComponent();
+    }
+    T.Mesh->ClearAllMeshSections();
+    T.Mesh->CreateMeshSection_LinearColor(0, Build.T.Positions, Build.T.Triangles, Build.T.Normals, Build.T.UV0, Build.T.UV1, Build.T.UV2, Build.T.UV3, Build.T.Colors, Build.T.Tangents, false);
+    T.Mesh->SetMaterial(0, SurfaceMID);
+    if (Build.W.Positions.Num())
+    {
+        T.Mesh->CreateMeshSection_LinearColor(1, Build.W.Positions, Build.W.Triangles, Build.W.Normals, Build.W.UV0, Build.W.UV1, Build.W.UV2, Build.W.UV3, Build.W.Colors, Build.W.Tangents, false);
+        T.Mesh->SetMaterial(1, HydroMID);
+    }
+    T.SinkCenter = Build.SinkCenter;
+    T.StepM = Build.StepM;
+    T.bDirty = false;
+    Counters.HorizonTiles = HorizonTiles.Num();
+}
+
+void AAethraVisualWorld::UpdateHorizon(const FVector2D& ViewerM, int32 Budget)
+{
+    if (!World)
+    {
+        return;
+    }
+    // Finished builds first (cheap: mesh upload only).
+    TArray<FIntPoint> Ready;
+    for (const TPair<FIntPoint, TFuture<TSharedPtr<FVwHorizonBuild>>>& Job : HorizonJobs)
+    {
+        if (Job.Value.IsReady())
+        {
+            Ready.Add(Job.Key);
+        }
+    }
+    for (const FIntPoint& Key : Ready)
+    {
+        TSharedPtr<FVwHorizonBuild> Build = HorizonJobs[Key].Get();
+        HorizonJobs.Remove(Key);
+        if (Build)
+        {
+            ApplyHorizonTile(Key, *Build);
+        }
+    }
+    const FVwProfile& Q = Profile();
+    const double Reach = Q.HorizonKm * 1000.0;
+    auto RectDistance = [&ViewerM](FIntPoint T)
+    {
+        const double X0 = T.X * HorizonTile, Y0 = T.Y * HorizonTile;
+        const double DX = FMath::Max3(X0 - ViewerM.X, 0.0, ViewerM.X - (X0 + HorizonTile));
+        const double DY = FMath::Max3(Y0 - ViewerM.Y, 0.0, ViewerM.Y - (Y0 + HorizonTile));
+        return FMath::Sqrt(DX * DX + DY * DY);
+    };
+    // Nearest missing or stale tiles first.
+    TArray<TPair<double, FIntPoint>> Wanted;
+    const int32 R = FMath::CeilToInt(Reach / HorizonTile) + 1;
+    const FIntPoint C(FMath::FloorToInt(ViewerM.X / HorizonTile), FMath::FloorToInt(ViewerM.Y / HorizonTile));
+    for (int32 Y = -R; Y <= R; ++Y)
+    {
+        for (int32 X = -R; X <= R; ++X)
+        {
+            const FIntPoint T = C + FIntPoint(X, Y);
+            const double D = RectDistance(T);
+            if (D > Reach)
+            {
+                continue;
+            }
+            const FVwHorizonTile* Have = HorizonTiles.Find(T);
+            const bool bStale = Have && Have->bDirty;
+            if ((!Have || bStale) && !HorizonJobs.Contains(T))
+            {
+                Wanted.Add({ D, T });
+            }
+        }
+    }
+    Wanted.Sort([](const TPair<double, FIntPoint>& A, const TPair<double, FIntPoint>& B) { return A.Key < B.Key; });
+    for (int32 I = 0; I < Wanted.Num() && I < Budget; ++I)
+    {
+        LaunchHorizonTile(Wanted[I].Value, ViewerM);
+    }
+    // Tiles beyond the reach (with a tile of margin, against flicker) go away.
+    TArray<FIntPoint> Far;
+    for (const TPair<FIntPoint, FVwHorizonTile>& T : HorizonTiles)
+    {
+        if (RectDistance(T.Key) > Reach + HorizonTile)
+        {
+            Far.Add(T.Key);
+        }
+    }
+    for (const FIntPoint& Key : Far)
+    {
+        if (HorizonTiles[Key].Mesh)
+        {
+            HorizonTiles[Key].Mesh->DestroyComponent();
+        }
+        HorizonTiles.Remove(Key);
+    }
+    Counters.HorizonTiles = HorizonTiles.Num();
+}
+
+void AAethraVisualWorld::MarkHorizonDirty(const FVector2D& CenterM, double RadiusM)
+{
+    for (TPair<FIntPoint, FVwHorizonTile>& T : HorizonTiles)
+    {
+        const FBox2D Box(FVector2D(T.Key.X * HorizonTile, T.Key.Y * HorizonTile), FVector2D((T.Key.X + 1) * HorizonTile, (T.Key.Y + 1) * HorizonTile));
+        if (Box.ComputeSquaredDistanceToPoint(CenterM) <= RadiusM * RadiusM)
+        {
+            T.Value.bDirty = true;
+        }
+    }
+}
+
+void AAethraVisualWorld::FlushHorizon()
+{
+    for (int32 Guard = 0; Guard < 64; ++Guard)
+    {
+        for (TPair<FIntPoint, TFuture<TSharedPtr<FVwHorizonBuild>>>& Job : HorizonJobs)
+        {
+            Job.Value.Wait();
+        }
+        UpdateHorizon(LastViewerM, 1000);
+        if (!HorizonJobs.Num())
+        {
+            return;
+        }
+    }
+}
+
+double AAethraVisualWorld::HorizonReachM() const
+{
+    double Reach = 0.0;
+    for (const TPair<FIntPoint, FVwHorizonTile>& T : HorizonTiles)
+    {
+        for (int32 K = 0; K < 4; ++K)
+        {
+            const FVector2D Corner((T.Key.X + (K & 1)) * HorizonTile, (T.Key.Y + (K >> 1)) * HorizonTile);
+            Reach = FMath::Max(Reach, (Corner - LastViewerM).Size());
+        }
+    }
+    return Reach;
+}
+
+const UProceduralMeshComponent* AAethraVisualWorld::HorizonMesh(FIntPoint Tile) const
+{
+    const FVwHorizonTile* T = HorizonTiles.Find(Tile);
+    return T ? T->Mesh.Get() : nullptr;
 }
 
 void AAethraVisualWorld::BuildFalls()
@@ -845,10 +1092,11 @@ void AAethraVisualWorld::UpdateStreaming(const FVector& Viewer, int32 Budget)
     }
     const FVector2D V(Viewer.X / 100.0, Viewer.Y / 100.0);
     LastViewerM = V;
-    // Level 1 chunks within Radius[1]; a level-1 chunk near the viewer is replaced by its four level-0 children.
+    // Level 1 chunks within the far radius; a level-1 chunk near the viewer is replaced by its four level-0 children.
     TSet<FIntVector> Wanted;
     TArray<TPair<double, FIntVector>> Missing;
-    const int32 R1 = FMath::CeilToInt(Radius[1] / ChunkSize[1]);
+    const double NearRadius = Profile().NearRadius, FarRadius = Profile().FarRadius;
+    const int32 R1 = FMath::CeilToInt(FarRadius / ChunkSize[1]);
     const FIntPoint C1(FMath::FloorToInt(V.X / ChunkSize[1]), FMath::FloorToInt(V.Y / ChunkSize[1]));
     for (int32 Y = -R1; Y <= R1; ++Y)
     {
@@ -857,11 +1105,11 @@ void AAethraVisualWorld::UpdateStreaming(const FVector& Viewer, int32 Budget)
             const FIntPoint P = C1 + FIntPoint(X, Y);
             const FVector2D Center((P.X + .5) * ChunkSize[1], (P.Y + .5) * ChunkSize[1]);
             const double D = (Center - V).Size();
-            if (D > Radius[1])
+            if (D > FarRadius)
             {
                 continue;
             }
-            if (D < Radius[0])
+            if (D < NearRadius)
             {
                 for (int32 K = 0; K < 4; ++K)
                 {
@@ -888,23 +1136,41 @@ void AAethraVisualWorld::UpdateStreaming(const FVector& Viewer, int32 Budget)
     {
         BuildChunk(Missing[I].Value.Z, FIntPoint(Missing[I].Value.X, Missing[I].Value.Y), V);
     }
-    // Remove chunks no longer wanted, but only once every wanted chunk exists (no holes meanwhile).
-    if (Missing.Num() <= Budget)
+    // Remove chunks no longer wanted as soon as their area is covered again (no holes, and no coarse
+    // chunk left under fine ones, where it would poke through): a far chunk goes when its four near
+    // children exist, a near chunk when its far parent exists; anything else once nothing is missing.
+    TArray<FIntVector> Drop;
+    for (const TPair<FIntVector, FVwChunk>& C : Chunks)
     {
-        TArray<FIntVector> Drop;
-        for (const TPair<FIntVector, FVwChunk>& C : Chunks)
+        if (Wanted.Contains(C.Key))
         {
-            if (!Wanted.Contains(C.Key))
-            {
-                Drop.Add(C.Key);
-            }
+            continue;
         }
-        for (const FIntVector& K : Drop)
+        bool bCovered = Missing.Num() <= Budget;
+        if (C.Key.Z == 1)
         {
-            DropChunk(K);
+            bool bChildren = true;
+            for (int32 K = 0; K < 4; ++K)
+            {
+                bChildren &= Chunks.Contains(FIntVector(C.Key.X * 2 + (K & 1), C.Key.Y * 2 + (K >> 1), 0));
+            }
+            bCovered |= bChildren;
+        }
+        else
+        {
+            bCovered |= Chunks.Contains(FIntVector(FMath::FloorToInt(C.Key.X / 2.0), FMath::FloorToInt(C.Key.Y / 2.0), 1));
+        }
+        if (bCovered)
+        {
+            Drop.Add(C.Key);
         }
     }
+    for (const FIntVector& K : Drop)
+    {
+        DropChunk(K);
+    }
     Counters.Loaded = Chunks.Num();
+    UpdateCaves(V, FMath::Max(Budget, 2));
 }
 
 void AAethraVisualWorld::DropChunk(const FIntVector& Key)
@@ -963,6 +1229,10 @@ void AAethraVisualWorld::TreesIn(int32 Level, FIntPoint Coord, TArray<FFloraTree
             {
                 continue;
             }
+            if ((Caves && (Caves->CoversColumn(T.Position, 0.0) || Caves->NearEntrance(T.Position, 16.0))) || (Ruins && Ruins->SurfaceSiteAt(T.Position)))
+            {
+                continue;
+            }
             Out.Add(T);
         }
     }
@@ -988,6 +1258,305 @@ bool AAethraVisualWorld::FellTree(uint64 TreeId)
         }
     }
     return bSaved;
+}
+
+// ------------------------------------------------------------------ caves and ruins
+
+void AAethraVisualWorld::BuildRuins()
+{
+    for (UInstancedStaticMeshComponent* C : RuinInstances)
+    {
+        if (C)
+        {
+            C->DestroyComponent();
+        }
+    }
+    RuinInstances.Reset();
+    RuinPieces = 0;
+    if (!Ruins)
+    {
+        return;
+    }
+    for (int32 S = 0; S < ShapeMeshes.Num(); ++S)
+    {
+        UInstancedStaticMeshComponent* C = NewObject<UInstancedStaticMeshComponent>(this);
+        C->SetStaticMesh(ShapeMeshes[S]);
+        C->SetMaterial(0, SurfaceMID);
+        C->NumCustomDataFloats = 3;
+        C->SetupAttachment(RootComponent);
+        C->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+        C->RegisterComponent();
+        RuinInstances.Add(C);
+    }
+    TArray<FRuinPiece> Pieces;
+    for (const FRuinSite& Site : Ruins->Sites())
+    {
+        Pieces.Reset();
+        FAethraRuinGen::Build(Site, World->GetSeed(), Pieces);
+        for (int32 K = 0; K < Pieces.Num(); ++K)
+        {
+            UInstancedStaticMeshComponent* C = RuinInstances[static_cast<int32>(Pieces[K].Shape)];
+            const int32 Index = C->AddInstance(Pieces[K].Transform, true);
+            C->SetCustomDataValue(Index, 0, (Hash01(Site.Id, K, 0, 6) - .5f) * .6f);
+            C->SetCustomDataValue(Index, 1, Id(Pieces[K].Surface) + 1.f);
+        }
+        RuinPieces += Pieces.Num();
+    }
+}
+
+void AAethraVisualWorld::BuildCaveFeatures()
+{
+    for (UInstancedStaticMeshComponent* C : CaveInstances)
+    {
+        if (C) C->DestroyComponent();
+    }
+    for (UPointLightComponent* L : CaveLights)
+    {
+        if (L) L->DestroyComponent();
+    }
+    for (UProceduralMeshComponent* P : CavePools)
+    {
+        if (P) P->DestroyComponent();
+    }
+    CaveInstances.Reset();
+    CaveLights.Reset();
+    CavePools.Reset();
+    if (!Caves)
+    {
+        return;
+    }
+    if (!CaveMeshes.Num())
+    {
+        // Stylised, faceted formations: a 4-sided stalactite, a 5-sided stalagmite, a hexagonal crystal.
+        auto Make = [this](FAhgMeshBuilder& B, const TCHAR* Name)
+        {
+            FMeshDescription Description;
+            B.ToMeshDescription(Description);
+            CaveMeshes.Add(FAhgShapes::MakeMesh(this, Name, Description, SurfaceMaterial, false));
+        };
+        FAhgMeshBuilder A;
+        A.Surface = Id(EAmeSurface::Limestone);
+        A.Cylinder(FVector3f(0, 0, -100), 2.f, 100.f, 4, true, 32.f);
+        Make(A, TEXT("SM_VW_Stalactite"));
+        FAhgMeshBuilder B;
+        B.Surface = Id(EAmeSurface::Limestone);
+        B.Cylinder(FVector3f(0, 0, 0), 36.f, 100.f, 5, true, 4.f);
+        Make(B, TEXT("SM_VW_Stalagmite"));
+        FAhgMeshBuilder C;
+        C.Surface = Id(EAmeSurface::Aetherite);
+        C.Cylinder(FVector3f(0, 0, -10), 16.f, 95.f, 6, true, 16.f);
+        C.Cylinder(FVector3f(0, 0, 85), 16.f, 40.f, 6, false, 0.f);
+        Make(C, TEXT("SM_VW_Crystal"));
+    }
+    for (int32 T = 0; T < 3; ++T)
+    {
+        UInstancedStaticMeshComponent* C = NewObject<UInstancedStaticMeshComponent>(this);
+        C->SetStaticMesh(CaveMeshes[T]);
+        C->SetMaterial(0, SurfaceMID);
+        C->NumCustomDataFloats = 3;
+        C->SetupAttachment(RootComponent);
+        C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        C->SetCullDistances(0, 40000);
+        C->RegisterComponent();
+        CaveInstances.Add(C);
+    }
+    TArray<FAethraCaveGen::FFormation> Formations;
+    for (const FCaveSystem& Sys : Caves->Systems())
+    {
+        Formations.Reset();
+        Caves->Formations(Sys, Formations);
+        for (const FAethraCaveGen::FFormation& F : Formations)
+        {
+            const FRotator Rot = F.Type == 2 ? FRotationMatrix::MakeFromZ(F.Up).Rotator() : FRotator(0.f, 360.f * Hash01(Sys.Id, FMath::FloorToInt(F.Base.X * 10.0), FMath::FloorToInt(F.Base.Y * 10.0), 7), 0.f);
+            const FVector Scale = F.Type == 2 ? FVector(F.Size * .5f, F.Size * .5f, F.Size) : FVector(F.Size * .55f, F.Size * .55f, F.Size);
+            CaveInstances[F.Type]->AddInstance(FTransform(Rot, F.Base * 100.0, Scale), true);
+        }
+        if (Sys.Id == 0)
+        {
+            UE_LOG(LogAethraVW, Display, TEXT("Demo cave (%s): %d formations, %d chambers, pool %s."), FAethraCaveGen::KindName(Sys.Kind), Formations.Num(), Sys.Chambers.Num(), Sys.PoolLevel > -1e8f ? TEXT("yes") : TEXT("no"));
+        }
+        // A pool in the deepest chamber (enchanted and giant caves): still, clear water.
+        if (Sys.PoolLevel > -1e8f && Sys.Chambers.Num())
+        {
+            const FCaveChamber& Ch = Sys.Chambers.Last();
+            UProceduralMeshComponent* Pool = NewObject<UProceduralMeshComponent>(this);
+            Pool->SetupAttachment(RootComponent);
+            const double Z = Sys.PoolLevel * 100.0;
+            const FVector2D C(Ch.Center.X, Ch.Center.Y);
+            TArray<FVector> P = { FVector((C.X - Ch.Radii.X) * 100.0, (C.Y - Ch.Radii.Y) * 100.0, Z), FVector((C.X + Ch.Radii.X) * 100.0, (C.Y - Ch.Radii.Y) * 100.0, Z),
+                FVector((C.X - Ch.Radii.X) * 100.0, (C.Y + Ch.Radii.Y) * 100.0, Z), FVector((C.X + Ch.Radii.X) * 100.0, (C.Y + Ch.Radii.Y) * 100.0, Z) };
+            const int32 Body = World->GetBodies().Num() > 4 ? 4 : 1;
+            TArray<FVector2D> UV0 = { FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector };
+            TArray<FVector2D> UV1 = { FVector2D(Body, 0), FVector2D(Body, 0), FVector2D(Body, 0), FVector2D(Body, 0) };
+            TArray<FLinearColor> Col = { FLinearColor(.1f, 0, 0, 1), FLinearColor(.1f, 0, 0, 1), FLinearColor(.1f, 0, 0, 1), FLinearColor(.1f, 0, 0, 1) };
+            TArray<FVector> Normals = { FVector::UpVector, FVector::UpVector, FVector::UpVector, FVector::UpVector };
+            TArray<FVector2D> Empty;
+            TArray<FProcMeshTangent> Tangents;
+            Pool->CreateMeshSection_LinearColor(0, P, { 0, 2, 1, 1, 2, 3 }, Normals, UV0, UV1, Empty, Empty, Col, Tangents, false);
+            Pool->SetMaterial(0, HydroMID);
+            Pool->SetCastShadow(false);
+            Pool->RegisterComponent();
+            CavePools.Add(Pool);
+        }
+        // Enchanted caves glow: soft teal lights without shadows in each chamber (cheap).
+        if (Sys.Kind == ECaveKind::Enchanted)
+        {
+            for (const FCaveChamber& Ch : Sys.Chambers)
+            {
+                UPointLightComponent* L = NewObject<UPointLightComponent>(this);
+                L->SetupAttachment(RootComponent);
+                L->SetWorldLocation(Ch.Center * 100.0);
+                L->SetIntensityUnits(ELightUnits::Candelas);
+                L->SetIntensity(40.f);
+                L->SetLightColor(FLinearColor(.35f, 1.f, .85f));
+                L->SetAttenuationRadius(Ch.Radii.GetMax() * 220.f);
+                L->SetCastShadows(false);
+                L->RegisterComponent();
+                CaveLights.Add(L);
+            }
+        }
+    }
+}
+
+void AAethraVisualWorld::BuildCaveBlock(const FIntVector& Block)
+{
+    if (TObjectPtr<UProceduralMeshComponent>* Old = CaveBlocks.Find(Block))
+    {
+        if (*Old)
+        {
+            (*Old)->DestroyComponent();
+        }
+        CaveBlocks.Remove(Block);
+    }
+    FCaveMesh M;
+    Caves->MeshBlock(Block, M);
+    UProceduralMeshComponent* Mesh = nullptr;
+    if (M.Triangles.Num())
+    {
+        Mesh = NewObject<UProceduralMeshComponent>(this);
+        Mesh->SetupAttachment(RootComponent);
+        Mesh->bUseAsyncCooking = true;
+        TArray<FVector2D> Empty;
+        TArray<FProcMeshTangent> Tangents;
+        Mesh->CreateMeshSection_LinearColor(0, M.Positions, M.Triangles, M.Normals, M.UV0, M.UV1, M.UV2, Empty, M.Colors, Tangents, true);
+        Mesh->SetMaterial(0, SurfaceMID);
+        Mesh->RegisterComponent();
+        Counters.Triangles += M.Triangles.Num() / 3;
+    }
+    CaveBlocks.Add(Block, Mesh);
+}
+
+void AAethraVisualWorld::UpdateCaves(const FVector2D& ViewerM, int32 Budget)
+{
+    if (!Caves)
+    {
+        return;
+    }
+    // Blocks under the full-detail terrain are meshed; far ones are released (the height field and
+    // the horizon show that ground from afar, from the same WorldGen surface).
+    const double Near = Profile().NearRadius + 48.0, Far = Profile().NearRadius + 160.0;
+    TArray<TPair<double, FIntVector>> Missing;
+    for (const FIntVector& B : Caves->ActiveBlocks())
+    {
+        const double D = (FVector2D((B.X + .5) * FAethraCaveGen::BlockM, (B.Y + .5) * FAethraCaveGen::BlockM) - ViewerM).Size();
+        if (D < Near && !CaveBlocks.Contains(B))
+        {
+            Missing.Add({ D, B });
+        }
+    }
+    Missing.Sort([](const TPair<double, FIntVector>& A, const TPair<double, FIntVector>& B) { return A.Key < B.Key; });
+    for (int32 I = 0; I < Missing.Num() && I < Budget; ++I)
+    {
+        BuildCaveBlock(Missing[I].Value);
+    }
+    TArray<FIntVector> Drop;
+    for (const TPair<FIntVector, TObjectPtr<UProceduralMeshComponent>>& B : CaveBlocks)
+    {
+        if ((FVector2D((B.Key.X + .5) * FAethraCaveGen::BlockM, (B.Key.Y + .5) * FAethraCaveGen::BlockM) - ViewerM).Size() > Far)
+        {
+            Drop.Add(B.Key);
+        }
+    }
+    for (const FIntVector& K : Drop)
+    {
+        if (CaveBlocks[K])
+        {
+            CaveBlocks[K]->DestroyComponent();
+        }
+        CaveBlocks.Remove(K);
+    }
+}
+
+int32 AAethraVisualWorld::CaveBlockCount() const
+{
+    int32 N = 0;
+    for (const TPair<FIntVector, TObjectPtr<UProceduralMeshComponent>>& B : CaveBlocks)
+    {
+        N += B.Value != nullptr;
+    }
+    return N;
+}
+
+const UProceduralMeshComponent* AAethraVisualWorld::CaveBlockMesh(const FIntVector& Block) const
+{
+    const TObjectPtr<UProceduralMeshComponent>* M = CaveBlocks.Find(Block);
+    return M ? M->Get() : nullptr;
+}
+
+bool AAethraVisualWorld::Dig(const FVector& CentreCm, float RadiusM, bool bFill)
+{
+    if (!Caves || RadiusM <= 0.f || RadiusM > 8.f)
+    {
+        return false;
+    }
+    const FVector C = CentreCm / 100.0;
+    const int32 ColumnsBefore = Caves->ActiveBlocks().Num();
+    TArray<FIntVector> Touched;
+    Caves->AddEdit({ C, RadiusM, bFill }, Touched);
+    for (const FIntVector& B : Touched)
+    {
+        BuildCaveBlock(B);
+    }
+    // New volume columns: the level-0 terrain there must open (rebuild the chunks it touches).
+    const bool bNewColumns = Caves->ActiveBlocks().Num() != ColumnsBefore;
+    TSet<FIntPoint> ChunkKeys;
+    for (int32 K = 0; K < 4; ++K)
+    {
+        const FVector2D Corner(C.X + ((K & 1) ? 1 : -1) * (RadiusM + FAethraCaveGen::BlockM), C.Y + ((K & 2) ? 1 : -1) * (RadiusM + FAethraCaveGen::BlockM));
+        ChunkKeys.Add(FIntPoint(FMath::FloorToInt(Corner.X / ChunkSize[0]), FMath::FloorToInt(Corner.Y / ChunkSize[0])));
+    }
+    // Trees standing in the dug sphere fall (persisted like any felled tree).
+    if (!bFill)
+    {
+        for (const FIntPoint& K : ChunkKeys)
+        {
+            TArray<FFloraTree> Trees;
+            TreesIn(0, K, Trees);
+            for (const FFloraTree& T : Trees)
+            {
+                if (FVector2D::Distance(T.Position, FVector2D(C)) < RadiusM + 1.5f && FMath::Abs(T.Ground - C.Z) < RadiusM + 1.f)
+                {
+                    Flora.Fell(T.Id);
+                }
+            }
+        }
+        Flora.SaveToFile(FloraPath);
+    }
+    for (const FIntPoint& K : ChunkKeys)
+    {
+        if (bNewColumns || !bFill)
+        {
+            const FIntVector Key(K.X, K.Y, 0);
+            if (Chunks.Contains(Key))
+            {
+                DropChunk(Key);
+                BuildChunk(0, K, LastViewerM);
+            }
+        }
+    }
+    BuildCaveFeatures();
+    MarkHorizonDirty(FVector2D(C), RadiusM);
+    return Caves->SaveEdits(CavePath);
 }
 
 // ------------------------------------------------------------------ time of day, tick
@@ -1031,6 +1600,11 @@ void AAethraVisualWorld::SetHour(float Hour)
     }
     for (TActorIterator<APostProcessVolume> It(GetWorld()); It; ++It)
     {
+        // Restrained bloom and saturation: natural materials, not a glossy toy look.
+        It->Settings.bOverride_BloomIntensity = true;
+        It->Settings.BloomIntensity = .3f;
+        It->Settings.bOverride_ColorSaturation = true;
+        It->Settings.ColorSaturation = FVector4(.95f, .95f, .95f, 1.f);
         It->Settings.bOverride_AutoExposureBias = true;
         It->Settings.AutoExposureBias = FMath::Lerp(0.f, -1.f, Night);
     }
@@ -1066,14 +1640,29 @@ void AAethraVisualWorld::Tick(float DeltaSeconds)
         SetHour(Hour);
     }
     StreamClock += DeltaSeconds;
-    if (StreamClock >= .2f)
+    // One chunk build every 0.1 s (the same throughput as two every 0.2 s, half the spike per frame).
+    if (StreamClock >= .1f)
     {
         StreamClock = 0.f;
         const APlayerController* Controller = GetWorld()->GetFirstPlayerController();
         if (const APawn* Pawn = Controller ? Controller->GetPawn() : nullptr)
         {
-            UpdateStreaming(Pawn->GetActorLocation(), 2);
+            UpdateStreaming(Pawn->GetActorLocation(), 1);
         }
+        UpdateHorizon(LastViewerM, 2);
+    }
+    const bool bShowHorizon = CVarShowHorizon.GetValueOnGameThread() != 0;
+    for (TPair<FIntPoint, FVwHorizonTile>& T : HorizonTiles)
+    {
+        if (T.Value.Mesh && T.Value.Mesh->IsVisible() != bShowHorizon)
+        {
+            T.Value.Mesh->SetVisibility(bShowHorizon);
+        }
+    }
+    const int32 WantedQuality = FMath::Clamp(CVarQuality.GetValueOnGameThread(), 0, 3);
+    if (WantedQuality != Quality)
+    {
+        SetQuality(WantedQuality);
     }
     if (bShots)
     {
@@ -1088,7 +1677,7 @@ void AAethraVisualWorld::Tick(float DeltaSeconds)
     CSV_CUSTOM_STAT(AethraVW, Chunks, static_cast<float>(Chunks.Num()), ECsvCustomStatOp::Set);
 }
 
-void AAethraVisualWorld::PlaceViewer(const FVector2D& EyeM, float EyeHeightM, const FVector2D& LookM, float LookHeightM)
+void AAethraVisualWorld::PlaceViewer(const FVector2D& EyeM, float EyeHeightM, const FVector2D& LookM, float LookHeightM, bool bUnderground)
 {
     APlayerController* Controller = GetWorld()->GetFirstPlayerController();
     ACharacter* Character = Controller ? Cast<ACharacter>(Controller->GetPawn()) : nullptr;
@@ -1096,7 +1685,7 @@ void AAethraVisualWorld::PlaceViewer(const FVector2D& EyeM, float EyeHeightM, co
     {
         return;
     }
-    const FVector Eye = Cm(EyeM, FMath::Max(EyeHeightM, World->Height(EyeM) + 2.f));
+    const FVector Eye = Cm(EyeM, bUnderground ? EyeHeightM : FMath::Max(EyeHeightM, World->Height(EyeM) + 2.f));
     Character->GetCharacterMovement()->SetMovementMode(MOVE_Flying);
     Character->GetCharacterMovement()->Velocity = FVector::ZeroVector;
     Character->SetActorLocation(Eye - FVector(0, 0, 65.0), false, nullptr, ETeleportType::TeleportPhysics);
@@ -1106,24 +1695,26 @@ void AAethraVisualWorld::PlaceViewer(const FVector2D& EyeM, float EyeHeightM, co
 
 void AAethraVisualWorld::RunShots(float DeltaSeconds)
 {
+    // Even stages place the camera, odd ones take the shot 4 s later (time for streaming), then quit.
     ShotClock += DeltaSeconds;
-    static const float Times[] = { 6.f, 10.f, 14.f, 18.f, 22.f, 26.f, 30.f, 34.f, 38.f, 42.f, 46.f, 50.f, 54.f, 58.f, 62.f, 66.f, 69.f };
-    if (ShotStage >= UE_ARRAY_COUNT(Times) || ShotClock < Times[ShotStage])
+    constexpr int32 LastStage = 24;
+    if (ShotStage > LastStage || ShotClock < 6.f + 4.f * ShotStage)
     {
         return;
     }
     APlayerController* Controller = GetWorld()->GetFirstPlayerController();
     IConsoleVariable* HourVar = IConsoleManager::Get().FindConsoleVariable(TEXT("aethra.vw.Hour"));
     const FVector2D Town = bHasSettlement ? SettlementCenter : FVector2D::ZeroVector;
-    auto NearestBody = [this](EHydroKind Kind, FVector2D& Out)
+    const int32 Seed = World->GetSeed();
+    // Searches around the town on rings (the generator decides what is where; the tour only finds it).
+    auto Find = [&](TFunctionRef<bool(const FVector2D&, const FWorldSample&)> Test, FVector2D& Out)
     {
-        for (int32 R = 50; R < 3500; R += 50)
+        for (int32 R = 80; R < 3200; R += 40)
         {
-            for (int32 K = 0; K < 32; ++K)
+            for (int32 K = 0; K < 48; ++K)
             {
-                const FVector2D P = FVector2D(FMath::Cos(K * PI / 16.0), FMath::Sin(K * PI / 16.0)) * R;
-                const FWorldSample S = World->Sample(P);
-                if (S.IsWater() && World->GetBodies().IsValidIndex(S.WaterBody) && World->GetBodies()[S.WaterBody].Kind == Kind)
+                const FVector2D P = Town + FVector2D(FMath::Cos(K * PI / 24.0), FMath::Sin(K * PI / 24.0)) * R;
+                if (Test(P, World->Sample(P)))
                 {
                     Out = P;
                     return true;
@@ -1132,86 +1723,137 @@ void AAethraVisualWorld::RunShots(float DeltaSeconds)
         }
         return false;
     };
+    auto EnvAt = [this](const FVector2D& P, const FWorldSample& S)
+    {
+        const float DX = World->Height(P + FVector2D(2, 0)) - World->Height(P - FVector2D(2, 0));
+        const float DY = World->Height(P + FVector2D(0, 2)) - World->Height(P - FVector2D(0, 2));
+        return FFloraEnvironment::From(S, FVector3f(-DX / 4.f, -DY / 4.f, 1.f).GetSafeNormal());
+    };
     FVector2D Spot;
     switch (ShotStage)
     {
-    case 0: // A: the plain, the river and the mountains
+    case 0: // A: the great plain, the river and the mountains
         if (HourVar) HourVar->Set(16.f);
         PlaceViewer(Town + FVector2D(-260, -220), World->Height(Town) + 70.f, Town + FVector2D(900, 700), World->Height(Town) + 40.f);
         break;
-    case 2: // C: architecture, from the land side with the river and the bridge behind
+    case 2: // B: a flower field (sunflowers if there are any near, else any field), from inside it
+        if (Find([&](const FVector2D& P, const FWorldSample& S) { const FFieldSample F = FFloraGen::FieldAt(Seed, P, EnvAt(P, S)); return F.Field == EFlowerField::Sunflower && F.Strength > .95f; }, Spot)
+            || Find([&](const FVector2D& P, const FWorldSample& S) { return FFloraGen::FieldAt(Seed, P, EnvAt(P, S)).Strength > .95f; }, Spot))
+        {
+            const FVector2D Dir = (Spot - Town).GetSafeNormal();
+            PlaceViewer(Spot - Dir * 12.0, World->Height(Spot - Dir * 12.0) + 2.6f, Spot + Dir * 45.0, World->Height(Spot + Dir * 45.0) + .5f);
+        }
+        break;
+    case 4: // C: a forest with geometric trees, from its edge
+        if (Find([](const FVector2D& P, const FWorldSample& S) { return S.Biome == EAmeBiome::Forest && S.ForestDensity > .55f && S.Height < 120.f; }, Spot))
+        {
+            const FVector2D Dir = (Spot - Town).GetSafeNormal();
+            const FVector2D Eye = Spot - Dir * 35.0;
+            PlaceViewer(Eye, World->Height(Eye) + 4.f, Spot + Dir * 20.0, World->Height(Spot) + 5.f);
+        }
+        break;
+    case 6: // D: the cave entrance on its hillside
+        if (const FCaveSystem* Sys = Caves ? Caves->DemoSystem() : nullptr)
+        {
+            const FVector2D E(Sys->Entrance), In = Sys->Inward, Side(-In.Y, In.X);
+            const FVector2D Eye = E - In * 15.0 + Side * 5.0;
+            PlaceViewer(Eye, World->Height(Eye) + 3.5f, E + In * 3.0, Sys->Entrance.Z - 2.f);
+        }
+        break;
+    case 8: // D: inside the cave (enchanted chamber with the underground ruin)
+        if (const FCaveSystem* Sys = Caves ? Caves->DemoSystem() : nullptr)
+        {
+            const FCaveChamber& Ch = Sys->Chambers[0];
+            FVector Look = Ch.Center;
+            for (const FRuinSite& R : Ruins->Sites())
+            {
+                if (R.CaveSystem == Sys->Id)
+                {
+                    Look = R.Anchor + FVector(0, 0, 1.5);
+                }
+            }
+            const FVector2D Eye = FVector2D(Ch.Center) - Sys->Inward * (Ch.Radii.X * .75);
+            PlaceViewer(Eye, Ch.Center.Z + 1.5f, FVector2D(Look), Look.Z, true);
+        }
+        break;
+    case 10: // the surface ruin (temple of the Aldarim)
+        for (const FRuinSite& R : Ruins ? Ruins->Sites() : TArray<FRuinSite>())
+        {
+            if (!R.bUnderground && R.Kind == ERuinKind::Temple)
+            {
+                const FVector2D A(R.Anchor), Eye = A + FVector2D(-20, -16);
+                PlaceViewer(Eye, World->Height(Eye) + 7.f, A, R.Anchor.Z + 2.f);
+                break;
+            }
+        }
+        break;
+    case 12: // C: architecture of today, from the land side with the river and the bridge behind
     {
         const FVector2D Across = (BridgeA - Town).GetSafeNormal(), Along(-Across.Y, Across.X);
         PlaceViewer(Town - Across * 34.0 + Along * 22.0, World->Height(Town) + 16.f, Town + Across * 6.0, World->Height(Town) + 3.f);
         break;
     }
-    case 4: // B: river water and the bridge
+    case 14: // A: the river and the bridge
     {
         const FVector2D Mid = (BridgeA + BridgeB) * .5;
         PlaceViewer(Mid + (BridgeB - BridgeA).GetSafeNormal() * 30.0 + FVector2D((BridgeB - BridgeA).Y, -(BridgeB - BridgeA).X).GetSafeNormal() * 40.0,
             World->Sample(Mid).WaterLevel + 6.f, Mid, World->Sample(Mid).WaterLevel);
         break;
     }
-    case 6: // B: the sea
-        if (NearestBody(EHydroKind::Sea, Spot))
+    case 16: // the horizon from a mountain top: everything in view is real and reachable
+    {
+        FVector2D Top = Town;
+        float TopH = -1e9f;
+        for (int32 R = 600; R < 4000; R += 100)
         {
-            const FVector2D Land = Spot * .97;
-            PlaceViewer(Land, 18.f, Spot * 1.06, 0.f);
-        }
-        break;
-    case 8: // B: a lake
-        if (NearestBody(EHydroKind::Lake, Spot))
-        {
-            PlaceViewer(Spot + Spot.GetSafeNormal() * -60.0, World->Sample(Spot).WaterLevel + 14.f, Spot, World->Sample(Spot).WaterLevel);
-        }
-        break;
-    case 10: // D: a waterfall
-        if (HourVar) HourVar->Set(12.5f); // high sun: the falls sit on north-facing slopes in the shade otherwise
-        if (World->GetWaterfalls().Num())
-        {
-            // Downstream of the fall, high enough to clear the trees (pines reach ~9 m), and the side
-            // whose line of sight to the fall stays above the terrain.
-            const FWaterfallSite& W = World->GetWaterfalls()[0];
-            const FVector2D Side(-W.Direction.Y, W.Direction.X);
-            const float LookZ = (W.Top + W.Bottom) * .5f;
-            const FVector2D Look = W.Position + W.Direction * (W.Length * .5); // the middle of the cascade
-            FVector2D Best = W.Position + W.Direction * 45.0;
-            float BestZ = W.Top + 4.f;
-            float BestClear = -1e9f;
-            for (const double Offset : { 0.0, 18.0, -18.0, 32.0, -32.0 })
+            for (int32 K = 0; K < 48; ++K)
             {
-                const FVector2D Eye = W.Position + W.Direction * (W.Length + 26.0) + Side * Offset;
-                const float EyeZ = FMath::Max(W.Top + 2.f, World->Height(Eye) + 14.f);
-                float Clear = 1e9f;
-                for (int32 K = 1; K < 16; ++K)
+                const FVector2D P = Town + FVector2D(FMath::Cos(K * PI / 24.0), FMath::Sin(K * PI / 24.0)) * R;
+                const float H = World->Height(P);
+                if (H > TopH)
                 {
-                    const float T = K / 16.f;
-                    const FVector2D P = FMath::Lerp(Eye, Look, T);
-                    Clear = FMath::Min(Clear, FMath::Lerp(EyeZ, LookZ, T) - World->Height(P));
-                }
-                if (Clear > BestClear)
-                {
-                    BestClear = Clear;
-                    Best = Eye;
-                    BestZ = EyeZ;
+                    TopH = H;
+                    Top = P;
                 }
             }
-            PlaceViewer(Best, BestZ, Look, LookZ);
         }
+        PlaceViewer(Top, TopH + 6.f, Town, World->Height(Town) + (TopH - World->Height(Town)) * .55f);
+        FlushHorizon();
         break;
-    case 12: // dusk
-        if (HourVar) HourVar->Set(17.6f); // sun ~8 degrees up: warm, long shadows
+    }
+    case 18: // dusk
+        if (HourVar) HourVar->Set(17.6f);
         PlaceViewer(Town + FVector2D(-260, -220), World->Height(Town) + 70.f, Town + FVector2D(900, 700), World->Height(Town) + 40.f);
         break;
-    case 14: // night
+    case 20: // night
         if (HourVar) HourVar->Set(22.5f);
         PlaceViewer(Town + FVector2D(-120, -100), World->Height(Town) + 30.f, Town, World->Height(Town) + 4.f);
         break;
-    case 16:
+    case 22: // a waterfall (visual cascade)
+        if (HourVar) HourVar->Set(12.5f);
+        if (World->GetWaterfalls().Num())
+        {
+            const FWaterfallSite& W = World->GetWaterfalls()[0];
+            const FVector2D Look = W.Position + W.Direction * (W.Length * .5);
+            const FVector2D Eye = W.Position + W.Direction * (W.Length + 26.0);
+            PlaceViewer(Eye, FMath::Max(W.Top + 2.f, World->Height(Eye) + 14.f), Look, (W.Top + W.Bottom) * .5f);
+        }
+        break;
+    case LastStage:
         if (Controller) Controller->ConsoleCommand(TEXT("quit"));
         break;
     default:
         if (Controller) Controller->ConsoleCommand(TEXT("shot showui"));
+        UE_LOG(LogAethraVW, Display, TEXT("Shot %d: %d chunks (%d near, %d far), %d horizon tiles (reach %.1f km), %d cave blocks, %d pools, %d trees, %d ground plants."),
+            ShotStage / 2, Chunks.Num(), ChunkCount(0), ChunkCount(1), HorizonTiles.Num(), HorizonReachM() / 1000.0, CaveBlockCount(), CavePools.Num(), Counters.Trees, Counters.Grass);
+        for (const TPair<FIntVector, FVwChunk>& C : Chunks)
+        {
+            const FVector2D Center((C.Key.X + .5) * ChunkSize[C.Key.Z], (C.Key.Y + .5) * ChunkSize[C.Key.Z]);
+            if (C.Key.Z == 0 && (Center - LastViewerM).Size() > Profile().NearRadius + 200.0)
+            {
+                UE_LOG(LogAethraVW, Display, TEXT("  stray near chunk (%d, %d) at %.0f m"), C.Key.X, C.Key.Y, (Center - LastViewerM).Size());
+            }
+        }
         break;
     }
     ++ShotStage;
@@ -1245,5 +1887,21 @@ void AAethraVisualWorld::EndPlay(const EEndPlayReason::Type Reason)
     {
         SavePieces();
     }
+    // Horizon builds read the generator: let them finish before it can go away.
+    for (TPair<FIntPoint, TFuture<TSharedPtr<FVwHorizonBuild>>>& Job : HorizonJobs)
+    {
+        Job.Value.Wait();
+    }
+    HorizonJobs.Reset();
     Super::EndPlay(Reason);
+}
+
+void AAethraVisualWorld::BeginDestroy()
+{
+    for (TPair<FIntPoint, TFuture<TSharedPtr<FVwHorizonBuild>>>& Job : HorizonJobs)
+    {
+        Job.Value.Wait();
+    }
+    HorizonJobs.Reset();
+    Super::BeginDestroy();
 }
