@@ -27,7 +27,7 @@ def pct(values, q):
 
 ft = col('FrameTime')
 assert ft, 'no FrameTime samples'
-print(f"frames={len(ft)} avgFPS={1000 * len(ft) / sum(ft):.1f} avgFT={st.mean(ft):.2f}ms "
+print(f"frames={len(ft)} duration={sum(ft) / 1000:.2f}s avgFPS={1000 * len(ft) / sum(ft):.1f} avgFT={st.mean(ft):.2f}ms "
       f"p50={pct(ft, .5):.2f} p95={pct(ft, .95):.2f} p99={pct(ft, .99):.2f} max={ft[-1]:.2f}")
 worst = ft[int(len(ft) * 0.99):]  # 1% low = FPS over the slowest 1% of frames
 print(f"  1%low={1000 * len(worst) / sum(worst):.1f}fps  (pXX = XXth percentile of frame time)")

@@ -8,13 +8,15 @@ param(
     [ValidateRange(1, 3600)][int]$Seconds = 60,
     [ValidateSet('', '-dpcvars=aethra.Horizon=0', '-dpcvars=aethra.Horizon=1')][string]$Extra = '',
     [string]$Exe = 'D:\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe',
-    [string]$Project = ''
+    [string]$Project = '',
+    [switch]$RealTime
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'bench-output.ps1')
 
 # PowerShell 5.1 evaluates param defaults before $PSScriptRoot is set.
-if (-not $Project) { $Project = Join-Path $PSScriptRoot '..\..\EcosDeAethra.uproject' }
+$root = (Get-Item -LiteralPath (Join-Path $PSScriptRoot '..\..')).FullName
+if (-not $Project) { $Project = Join-Path $root 'EcosDeAethra.uproject' }
 $projectFile = Get-Item -LiteralPath $Project
 if ($projectFile.PSIsContainer -or $projectFile.Extension -ne '.uproject') {
     throw "Project must identify an Unreal .uproject file."
@@ -23,13 +25,14 @@ $exeFile = Get-Item -LiteralPath $Exe
 if ($exeFile.PSIsContainer -or $exeFile.Extension -ne '.exe') {
     throw "Exe must identify a Windows executable."
 }
-$out = New-AethraBenchmarkDirectory -ProjectDirectory $projectFile.DirectoryName -Name $Name
+$out = New-AethraBenchmarkDirectory -ProjectDirectory $root -Name $Name
 Write-Output "Benchmark directory: $out"
 
 $arguments = @()
 if ($exeFile.BaseName -like 'UnrealEditor*') { $arguments += "`"$($projectFile.FullName)`"", '-game' }
-$arguments += '-windowed', '-ResX=1920', '-ResY=1080', '-ForceRes', '-nosound', '-benchmark', '-fps=60',
+$arguments += '-windowed', '-ResX=1920', '-ResY=1080', '-ForceRes', '-nosound',
     "-userdir=`"$out`"", "-abslog=`"$out\run.log`"", "-AethraBench=$Seconds", '"-ExecCmds=r.VSync 0, t.MaxFPS 0"'
+if (-not $RealTime) { $arguments += '-benchmark', '-fps=60' }
 if ($Extra) { $arguments += $Extra }
 
 $process = Start-Process -FilePath $exeFile.FullName -ArgumentList $arguments -PassThru

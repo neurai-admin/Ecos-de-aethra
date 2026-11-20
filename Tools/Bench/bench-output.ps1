@@ -8,7 +8,14 @@ function New-AethraBenchmarkDirectory {
         throw "The benchmark name is a reserved device name."
     }
 
-    $root = (Get-Item -LiteralPath $ProjectDirectory -ErrorAction Stop).FullName
+    $directory = Get-Item -LiteralPath $ProjectDirectory -Force -ErrorAction Stop
+    if (-not $directory.PSIsContainer) { throw "Benchmark root must be a directory." }
+    $root = $directory.FullName
+    for (; $null -ne $directory; $directory = $directory.Parent) {
+        if ($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            throw "Benchmark root and its parents must be physical directories."
+        }
+    }
     foreach ($component in 'Saved', 'Bench') {
         $root = Join-Path $root $component
         if (-not (Test-Path -LiteralPath $root)) {
