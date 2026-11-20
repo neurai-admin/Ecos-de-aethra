@@ -7,7 +7,7 @@
 param(
     [Parameter(Mandatory)][string]$Name,
     [ValidateRange(1, 3600)][int]$Seconds = 60,
-    [ValidateSet('', '-dpcvars=aethra.Horizon=0', '-dpcvars=aethra.Horizon=1')][string]$Extra = '',
+    [ValidateSet('', '-dpcvars=aethra.Horizon=0', '-dpcvars=aethra.Horizon=1', '-dpcvars=aethra.lis.Debug=0')][string]$Extra = '',
     [string]$Exe = 'D:\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe',
     [string]$Project = '',
     [switch]$RealTime,

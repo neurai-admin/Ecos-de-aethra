@@ -29,7 +29,19 @@ Uma remoção de madeira percebida pelo lenhador daquele local reduz sua crença
 
 ## Passos para conectar após aprovar o Marco 02
 
-Nenhum foi feito nesta branch, para não editar arquivos da equipe GPT/Codex.
+Estado em 20/11/2026 (LIS 02, branch experimental `claude/lis-world-integration-01`, detalhes em [INTEGRATION_LIS02.md](INTEGRATION_LIS02.md)):
+
+| Passo | Estado |
+| --- | --- |
+| 1. Dependência `AethraLIS` | Feito (pública, porque o diretor expõe tipos do LIS) |
+| 2. Componente no jogo | Feito: `AAethraLisDirector`, criado pelo GameMode |
+| 3. Classificador com os blocos do Marco 02 | Feito |
+| 4. Âncoras em coordenadas reais | Feito: escolhidas no terreno real e salvas no LIS |
+| 5. Save `Saved/LIS/World_<seed>.lis` | Feito |
+| 6. Autor da edição | Feito em branch separada (`claude/voxel-contract-lis-01`), aguardando revisão do GPT/Codex |
+| 7. Fila de edições pedidas pelos NPCs | Feito: só corte de madeira, validado |
+
+O texto abaixo é o plano original da fase 1.
 
 1. Adicionar `"AethraLIS"` às dependências privadas de `Source/EcosDeAethra/EcosDeAethra.Build.cs`.
 2. Criar no módulo do jogo um componente ou subsistema (por exemplo `UAethraLisSubsystem`) que:
