@@ -227,6 +227,7 @@ private:
     void DropChunk(const FIntVector& Key);
     float StreamClock = 0.f;
     float AppliedHour = -1.f;
+    int32 AppliedHide = 0;
 
     void MakeMaterials();
     void MakeVegetationMeshes();

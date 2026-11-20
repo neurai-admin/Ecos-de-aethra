@@ -71,7 +71,7 @@ TArray<FAmeMaterialDef> BuildLibrary()
     return L;
 }
 
-uint32 Mix(uint32 H)
+uint32 AmeMix(uint32 H)
 {
     H ^= H >> 16;
     H *= 0x7feb352dU;
@@ -83,7 +83,7 @@ uint32 Mix(uint32 H)
 
 float Hash01(int32 Seed, FIntPoint Cell, uint32 Salt)
 {
-    return (Mix(static_cast<uint32>(Seed) ^ Mix(static_cast<uint32>(Cell.X) * 0x9E3779B1U ^ Mix(static_cast<uint32>(Cell.Y) + Salt))) & 0xFFFFFF) / 16777215.f;
+    return (AmeMix(static_cast<uint32>(Seed) ^ AmeMix(static_cast<uint32>(Cell.X) * 0x9E3779B1U ^ AmeMix(static_cast<uint32>(Cell.Y) + Salt))) & 0xFFFFFF) / 16777215.f;
 }
 }
 
@@ -200,7 +200,12 @@ FAmeChoice FAmeSelector::Terrain(const FAmeEnvironment& Env, int32 Seed, FIntPoi
 {
     using S = EAmeSurface;
     FAmeChoice C;
-    const float Patch = Hash01(Seed, FIntPoint(Cell.X >> 3, Cell.Y >> 3), 17); // ~8-cell patches
+    // ~8-cell patches with soft, organic outlines (value noise; a hash per 8-cell block drew squares).
+    const float PX = Cell.X / 8.f, PY = Cell.Y / 8.f;
+    const int32 IX = FMath::FloorToInt(PX), IY = FMath::FloorToInt(PY);
+    const float FX = FMath::SmoothStep(0.f, 1.f, PX - IX), FY = FMath::SmoothStep(0.f, 1.f, PY - IY);
+    const float Patch = FMath::Lerp(FMath::Lerp(Hash01(Seed, FIntPoint(IX, IY), 17), Hash01(Seed, FIntPoint(IX + 1, IY), 17), FX),
+        FMath::Lerp(Hash01(Seed, FIntPoint(IX, IY + 1), 17), Hash01(Seed, FIntPoint(IX + 1, IY + 1), 17), FX), FY);
     const S Rock = RockSurface(Env.Rock);
 
     // 1. Steep ground shows bare rock; the transition band blends soil into rock.

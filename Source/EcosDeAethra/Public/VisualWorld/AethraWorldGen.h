@@ -93,7 +93,7 @@ private:
     TArray<float> Base, Filled, Accum;
     TArray<int32> Down;
     // Nearest-river data per node (multi-source distance transform).
-    TArray<float> RiverDist, RiverLevel, RiverWidth, RiverDepth, RiverPower;
+    TArray<float> RiverDist, RiverLevel, RiverWidth, RiverDepth, RiverPower, LakeMask;
     TArray<int32> RiverBodyAt, LakeBody;
     TArray<FVector2f> RiverDir;
     TArray<FHydroBody> Bodies;

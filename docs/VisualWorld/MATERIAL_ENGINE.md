@@ -13,7 +13,7 @@ Uma superfície é **dados**, não textura:
 
 Um único material lê essas grandezas de uma paleta de 64 × 4 texels float, criada em runtime, e gera o pixel. Não há arquivos de textura nem geração de textura por IA, nem por chunk nem em nenhum outro lugar.
 
-## Biblioteca (33 superfícies)
+## Biblioteca (33 superfícies no Protótipo 01; 43 após o Prompt 08)
 
 | Categoria | Superfícies |
 | --- | --- |
@@ -52,8 +52,29 @@ Os ids são gravados em dados de vértice e em saves. Novas superfícies entram 
 - **Peças e árvores:** o id vem do UV1 ou dos dados por instância (`CustomData 1` = id + 1). `CustomData 0` é a tonalidade por instância e `CustomData 2` o vento das árvores.
 - **Correção desta entrega:** malhas estáticas com só 2 canais UV liam o UV1 como flag de terreno e ficavam brancas. Agora toda malha AHG ou de flora tem 3 canais.
 
+## Prompt 08: nada de massinha
+
+- **Relevo procedural em toda superfície:** o shader calcula uma altura a partir do próprio padrão (juntas e cavidades afundam, o acento sobe, mais um grão fino) e gera a normal por derivadas de tela (bump por gradiente de superfície).
+  - Não há normal maps nem texturas novas.
+  - A profundidade vai na paleta (linha 3, verde), por padrão: alvenaria e telhas 2,2 cm; rocha 1,8; casca e tábuas 1,4; cascalho, musgo e folhas 1,1; grama e solo 0,7; neve, reboco e metal 0,3. Nenhuma superfície é perfeitamente lisa.
+- **Brilho só onde é mágico:** canal `Glow` (linha 3, azul) para emissão. Só a Aetherita e o Musgo Luminoso brilham.
+- **Pós-processo contido no Visual World:** bloom 0,3 e saturação 0,95.
+- **Grama:** as lâminas são iluminadas com a normal do chão, então não aparecem pretas contra a luz e combinam com o terreno onde terminam.
+- **Manchas de solo:** as manchas de solo alternativo usam ruído suave. O hash por bloco de 8 × 8 desenhava quadrados, que o relevo novo deixava evidentes.
+- **Teste 22:**
+  - superfícies naturais (terreno, rocha, vegetação) têm rugosidade de pelo menos 0,34 e nunca são metálicas;
+  - toda superfície tem relevo e variação de cor;
+  - só as encantadas brilham;
+  - a flora usa só superfícies AME.
+
+### Superfícies novas (fim da lista, ids preservados): 43 no total
+
+PetalSunflower, SunflowerDisk, PetalRose, PetalLavender, PetalDaisy, PetalPoppy, PetalAlpine, Fern, Aetherite (mineral original de Aethra, brilho 2,5), GlowMoss (brilho 0,8).
+
+Pétalas são foscas (rugosidade de 0,62 a 0,75), com veios do padrão Leaves.
+
 ## Limites
 
-- **Sem normal map:** o relevo do padrão é só de cor e oclusão.
+- **Relevo sem parallax:** o relevo é de normal, sem deslocamento real nem oclusão de parallax.
 - **Clima:** os parâmetros de chuva existem, mas ainda não há sistema de clima ligado a eles.
 - **Biomas futuros:** Deserto, Savana, Tundra, Selva, Vulcânico e Caverna já estão declarados, com regras de solo, mas o gerador ainda não os produz.

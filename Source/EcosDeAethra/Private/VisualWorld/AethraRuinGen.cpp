@@ -91,25 +91,25 @@ struct FRuinBuilder
         }
     }
 
-    void Column(const FRuinPalette& Pal, const FVector& At, float Height, float Width)
+    void Column(const FRuinPalette& Pal, const FVector& At, float ColumnHeight, float Width)
     {
         Add(EAhgShape::Block, Pal.Floor, At, FVector(Width * 1.4f, Width * 1.4f, .3f));
         if (Keep(.5f))
         {
-            const float H = Keep(.9f) ? Height : Height * (.3f + .5f * Rand(8)); // broken shaft
+            const float H = Keep(.9f) ? ColumnHeight : ColumnHeight * (.3f + .5f * Rand(8)); // broken shaft
             Add(EAhgShape::Column, Pal.Column, At + FVector(0, 0, .3f), FVector(Width, Width, H));
-            if (H >= Height)
+            if (H >= ColumnHeight)
             {
                 Add(EAhgShape::Block, Pal.Floor, At + FVector(0, 0, .3f + H), FVector(Width * 1.3f, Width * 1.3f, .25f));
             }
             else
             {
-                Debris(EAhgShape::Column, Pal.Column, At + FVector(Rand(9) * 3.f - 1.5f, Rand(10) * 3.f - 1.5f, 0), Height - H, Width);
+                Debris(EAhgShape::Column, Pal.Column, At + FVector(Rand(9) * 3.f - 1.5f, Rand(10) * 3.f - 1.5f, 0), ColumnHeight - H, Width);
             }
         }
         else
         {
-            Debris(EAhgShape::Column, Pal.Column, At + FVector(1.f, .5f, 0), Height * .7f, Width);
+            Debris(EAhgShape::Column, Pal.Column, At + FVector(1.f, .5f, 0), ColumnHeight * .7f, Width);
         }
     }
 };

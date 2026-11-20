@@ -5,7 +5,7 @@
 
 namespace
 {
-uint32 Mix(uint32 H)
+uint32 WorldMix(uint32 H)
 {
     H ^= H >> 16;
     H *= 0x7feb352dU;
@@ -32,7 +32,7 @@ FAethraWorldGen::FAethraWorldGen(int32 InSeed)
     const double Begin = FPlatformTime::Seconds();
     for (int32 I = 0; I < UE_ARRAY_COUNT(Offsets); ++I)
     {
-        const uint32 H = Mix(static_cast<uint32>(Seed) * 2654435761U + I * 97U);
+        const uint32 H = WorldMix(static_cast<uint32>(Seed) * 2654435761U + I * 97U);
         Offsets[I] = FVector2D((H & 0xFFFF) / 37.3, (H >> 16) / 41.7);
     }
     BuildDrainage();
@@ -45,7 +45,7 @@ float FAethraWorldGen::Noise(FVector2D P) const
     const float FX = static_cast<float>(P.X - X0), FY = static_cast<float>(P.Y - Y0);
     auto Grad = [this](int32 X, int32 Y, float DX, float DY)
     {
-        const uint32 H = Mix(static_cast<uint32>(Seed) ^ Mix(static_cast<uint32>(X) * 0x9E3779B1U ^ Mix(static_cast<uint32>(Y) * 0x85EBCA77U)));
+        const uint32 H = WorldMix(static_cast<uint32>(Seed) ^ WorldMix(static_cast<uint32>(X) * 0x9E3779B1U ^ WorldMix(static_cast<uint32>(Y) * 0x85EBCA77U)));
         const float A = (H & 0xFFFF) * (2.f * PI / 65536.f);
         return FMath::Cos(A) * DX + FMath::Sin(A) * DY;
     };
@@ -202,7 +202,7 @@ void FAethraWorldGen::BuildDrainage()
     };
     MakeBody(TEXT("Mar"), EHydroKind::Sea, TEXT("TropicalSea"));
     // The main river's water depends on the seed: a green, algae-rich lowland river or a clear one.
-    MakeBody(TEXT("Rio"), EHydroKind::River, (Mix(static_cast<uint32>(Seed) + 7U) & 1) ? TEXT("GreenRiver") : TEXT("ClearStream"));
+    MakeBody(TEXT("Rio"), EHydroKind::River, (WorldMix(static_cast<uint32>(Seed) + 7U) & 1) ? TEXT("GreenRiver") : TEXT("ClearStream"));
     MakeBody(TEXT("Riachos"), EHydroKind::Stream, TEXT("ClearStream"));
     MakeBody(TEXT("Cachoeiras"), EHydroKind::Waterfall, TEXT("Waterfall"));
     if (Bodies[RiverBody].Props.CurrentSpeed > 1.f)
@@ -213,6 +213,7 @@ void FAethraWorldGen::BuildDrainage()
     }
 
     LakeBody.Init(-1, Count);
+    LakeMask.Init(0.f, Count);
     TArray<float> LakeLevels;
     for (int32 I = 0; I < Count; ++I)
     {
@@ -266,6 +267,7 @@ void FAethraWorldGen::BuildDrainage()
         {
             Filled[I] = LakeLevels[LakeBody[I] - FirstLakeBody]; // flat lake surface
         }
+        LakeMask[I] = LakeBody[I] >= FirstLakeBody ? 1.f : 0.f;
         SeaNodes += Base[I] < 0.f;
     }
 
@@ -509,11 +511,24 @@ FWorldSample FAethraWorldGen::Sample(FVector2D P) const
             S.RiverStrength = D < Half + 8.f ? RiverPower[Near] + .05f : 0.f;
             WaterDist = FMath::Max(0.f, D - Half);
         }
-        if (Near >= 0 && LakeBody[Near] >= FirstLakeBody)
+        // Lakes: the shore is the 0.5 contour of the interpolated lake mask (round, following the
+        // ground), not the nearest node's 16 m square; the bed deepens toward the middle.
+        const float Mask = Bilinear(LakeMask, R);
+        if (Mask > .5f)
         {
-            S.WaterLevel = Filled[Near];
-            S.WaterBody = LakeBody[Near];
-            WaterDist = 0.f;
+            int32 Lake = -1;
+            for (int32 K = 0; K < 4 && Lake < 0; ++K)
+            {
+                const int32 N = NearestNode(R + FVector2D((K & 1) ? NodeSpacing * .5 : -NodeSpacing * .5, (K & 2) ? NodeSpacing * .5 : -NodeSpacing * .5));
+                Lake = N >= 0 && LakeBody[N] >= FirstLakeBody ? N : -1;
+            }
+            if (Lake >= 0)
+            {
+                S.WaterLevel = Filled[Lake];
+                S.WaterBody = LakeBody[Lake];
+                H = FMath::Min(H, Filled[Lake] - 3.f * (Mask - .5f));
+                WaterDist = 0.f;
+            }
         }
     }
     if (H < .3f && (S.WaterBody < 0 || S.WaterBody == SeaBody || !bInDomain))

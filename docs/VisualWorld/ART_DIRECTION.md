@@ -43,6 +43,28 @@ Detalhes em [FLORA.md](FLORA.md).
 - **Construções de Elden:** pedra talhada creme, reboco, telha terracota e cerâmica azul para os ricos.
 - **Água:** a cor não é escolhida à mão. Ela vem da óptica do corpo d'água (ver HYDROGEN.md).
 
+## Decisões oficiais do Prompt Mestre 08 (20/11/2026)
+
+| Tema | Decisão | Onde está |
+| --- | --- | --- |
+| Identidade gráfica | Fantasia geométrica estilizada de alta qualidade | Este documento |
+| Inspirações | Minecraft (mundo, mineração, árvores geométricas), LEGO (construção modular) e Roblox (criação), sem cópia direta | — |
+| Realismo | Não ultrarrealista: a beleza vem de direção de arte, composição, geometria, cor, luz e distância de visão | — |
+| Materiais | Naturais e detalhados, **nada de aparência de massinha**: rugosidade, variação de cor e relevo procedural em toda superfície; bloom e saturação contidos | [MATERIAL_ENGINE.md](MATERIAL_ENGINE.md), teste 22 |
+| Árvores comuns | Predominantemente quadradas: tronco segmentado, galhos angulares, copa de cubos variados, 3 variantes por espécie | [FLORA.md](FLORA.md), testes 13 e 17 |
+| Pinheiros | Triangulares ou cônicos estilizados | [FLORA.md](FLORA.md) |
+| Árvores especiais | Livres para formas orgânicas (a Árvore Anciã, rara, com musgo luminoso) | [FLORA.md](FLORA.md) |
+| Vegetação | FloraGen com ecologia (bioma, clima, umidade, solo, fertilidade, água, sol e inclinação); campos de girassóis, rosas silvestres, lavanda, flores mistas e alpinas | [FLORA.md](FLORA.md), testes 15 e 16 |
+| Desempenho | Escalável, com 4 perfis (Baixo, Médio, Alto, Ultra) que mantêm o mesmo mundo | [PERFORMANCE.md](PERFORMANCE.md), teste 23 |
+| RTX 3060 | Alvo para gráficos elevados e horizonte longo | [PERFORMANCE.md](PERFORMANCE.md) |
+| Horizonte | Visão extrema baseada em LOD, com distâncias decididas por benchmark | [HORIZON.md](HORIZON.md) |
+| **Aethra Reachable Horizon Rule** | Tudo o que o horizonte mostra existe no mundo e pode ser alcançado: o mesmo WorldGen, a mesma seed, nada inventado | [HORIZON.md](HORIZON.md), teste 18 |
+| Mundo | Uma única dimensão principal nesta fase: sem Nether, The End, dimensões paralelas ou portais | — |
+| Cavernas | Naturais, encantadas, obscuras e gigantes, no mesmo mundo, escaváveis | [CAVEGEN.md](CAVEGEN.md), testes 19 e 20 |
+| Ruínas | Civilizações antigas na superfície e no subsolo, com lore e pontos de recompensa | [RUINGEN.md](RUINGEN.md), teste 21 |
+| Mobs | Sem zumbis ou monstros hostis tradicionais nesta etapa: o interesse das cavernas vem de geologia, mistério e recursos | — |
+| Fauna | Animais naturais e espécies próprias ficam para o futuro; nenhum animal nesta entrega | [ROADMAP.md](ROADMAP.md) |
+
 ## O que não é
 
 - Não é Minecraft: os modelos, texturas, blocos e mapas são próprios, e nada é cópia.

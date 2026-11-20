@@ -36,10 +36,11 @@ namespace
 {
 TAutoConsoleVariable<float> CVarHour(TEXT("aethra.vw.Hour"), 16.f, TEXT("Visual World time of day, 0-24 (16 = warm afternoon light)."));
 TAutoConsoleVariable<int32> CVarShowHorizon(TEXT("aethra.vw.ShowHorizon"), 1, TEXT("Debug: 0 hides the far horizon tiles."));
+TAutoConsoleVariable<int32> CVarHide(TEXT("aethra.vw.Hide"), 0, TEXT("Debug: bit mask of things to hide (1 near terrain, 2 far terrain, 4 horizon, 8 pools, 16 caves, 32 falls, 64 foliage)."));
 TAutoConsoleVariable<int32> CVarQuality(TEXT("aethra.vw.Quality"), 2, TEXT("Visual World graphics profile: 0 Low, 1 Medium, 2 High, 3 Ultra."));
 
 
-uint32 Mix(uint32 H)
+uint32 VwMix(uint32 H)
 {
     H ^= H >> 16;
     H *= 0x7feb352dU;
@@ -51,7 +52,7 @@ uint32 Mix(uint32 H)
 
 float Hash01(int32 Seed, int32 X, int32 Y, uint32 Salt)
 {
-    return (Mix(static_cast<uint32>(Seed) ^ Mix(static_cast<uint32>(X) * 0x9E3779B1U ^ Mix(static_cast<uint32>(Y) * 0x85EBCA77U + Salt))) & 0xFFFFFF) / 16777215.f;
+    return (VwMix(static_cast<uint32>(Seed) ^ VwMix(static_cast<uint32>(X) * 0x9E3779B1U ^ VwMix(static_cast<uint32>(Y) * 0x85EBCA77U + Salt))) & 0xFFFFFF) / 16777215.f;
 }
 
 float Id(EAmeSurface S)
@@ -1651,13 +1652,27 @@ void AAethraVisualWorld::Tick(float DeltaSeconds)
         }
         UpdateHorizon(LastViewerM, 2);
     }
-    const bool bShowHorizon = CVarShowHorizon.GetValueOnGameThread() != 0;
-    for (TPair<FIntPoint, FVwHorizonTile>& T : HorizonTiles)
+    // Debug visibility mask (aethra.vw.Hide): 1 near terrain, 2 far terrain, 4 horizon, 8 pools, 16 cave
+    // blocks, 32 falls, 64 foliage.
+    const int32 Hide = CVarShowHorizon.GetValueOnGameThread() ? CVarHide.GetValueOnGameThread() : CVarHide.GetValueOnGameThread() | 4;
+    if (Hide != AppliedHide || Hide)
     {
-        if (T.Value.Mesh && T.Value.Mesh->IsVisible() != bShowHorizon)
+        AppliedHide = Hide;
+        for (TPair<FIntPoint, FVwHorizonTile>& T : HorizonTiles)
         {
-            T.Value.Mesh->SetVisibility(bShowHorizon);
+            if (T.Value.Mesh) T.Value.Mesh->SetVisibility(!(Hide & 4));
         }
+        for (TPair<FIntVector, FVwChunk>& C : Chunks)
+        {
+            if (C.Value.Mesh) C.Value.Mesh->SetVisibility(!(Hide & (C.Key.Z ? 2 : 1)));
+            for (UHierarchicalInstancedStaticMeshComponent* F : C.Value.Foliage)
+            {
+                if (F) F->SetVisibility(!(Hide & 64));
+            }
+        }
+        for (UProceduralMeshComponent* P : CavePools) { if (P) P->SetVisibility(!(Hide & 8)); }
+        for (TPair<FIntVector, TObjectPtr<UProceduralMeshComponent>>& B : CaveBlocks) { if (B.Value) B.Value->SetVisibility(!(Hide & 16)); }
+        for (UProceduralMeshComponent* F : Falls) { if (F) F->SetVisibility(!(Hide & 32)); }
     }
     const int32 WantedQuality = FMath::Clamp(CVarQuality.GetValueOnGameThread(), 0, 3);
     if (WantedQuality != Quality)
@@ -1846,14 +1861,6 @@ void AAethraVisualWorld::RunShots(float DeltaSeconds)
         if (Controller) Controller->ConsoleCommand(TEXT("shot showui"));
         UE_LOG(LogAethraVW, Display, TEXT("Shot %d: %d chunks (%d near, %d far), %d horizon tiles (reach %.1f km), %d cave blocks, %d pools, %d trees, %d ground plants."),
             ShotStage / 2, Chunks.Num(), ChunkCount(0), ChunkCount(1), HorizonTiles.Num(), HorizonReachM() / 1000.0, CaveBlockCount(), CavePools.Num(), Counters.Trees, Counters.Grass);
-        for (const TPair<FIntVector, FVwChunk>& C : Chunks)
-        {
-            const FVector2D Center((C.Key.X + .5) * ChunkSize[C.Key.Z], (C.Key.Y + .5) * ChunkSize[C.Key.Z]);
-            if (C.Key.Z == 0 && (Center - LastViewerM).Size() > Profile().NearRadius + 200.0)
-            {
-                UE_LOG(LogAethraVW, Display, TEXT("  stray near chunk (%d, %d) at %.0f m"), C.Key.X, C.Key.Y, (Center - LastViewerM).Size());
-            }
-        }
         break;
     }
     ++ShotStage;
