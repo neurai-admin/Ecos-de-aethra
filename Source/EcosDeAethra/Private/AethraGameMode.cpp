@@ -2,6 +2,7 @@
 
 #include "AethraCharacter.h"
 #include "AethraHUD.h"
+#include "AethraLisDirector.h"
 #include "AethraVoxelWorld.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyLightComponent.h"
@@ -54,6 +55,14 @@ void AAethraGameMode::StartPlay()
 {
     EnsureVoxelWorld();
     SpawnLighting();
+    // LIS 02: the Elden villagers. -NoLIS runs the voxel world alone (benchmarks without NPCs).
+    if (VoxelWorld && !FParse::Param(FCommandLine::Get(), TEXT("NoLIS")))
+    {
+        if (auto* Director = GetWorld()->SpawnActor<AAethraLisDirector>())
+        {
+            Director->Start(VoxelWorld, FIntPoint(6, 20)); // just ahead of the spawn view
+        }
+    }
     Super::StartPlay();
 }
 
