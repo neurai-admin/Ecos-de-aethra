@@ -301,8 +301,10 @@ bool FLisWorldSocial::RunTest(const FString&)
     F.Director->Step(1.f / 30.f);
     AAethraLisNpc* A = F.Director->BodyOf(4);
     AAethraLisNpc* B = F.Director->BodyOf(5);
-    // A walks slowly past B.
+    // A walks slowly past B, away from the crowd (each villager notes one encounter per hour).
+    A->Stop();
     B->Stop();
+    A->SetActorLocation(A->GetActorLocation() + FVector(3000, 3000, 0));
     B->SetActorLocation(A->GetActorLocation() + FVector(150, 0, 0));
     TArray<FIntVector> Path = { A->CurrentCell() + FIntVector(1, 0, 0), A->CurrentCell() + FIntVector(2, 0, 0) };
     A->FollowPath(Path, Path.Last());

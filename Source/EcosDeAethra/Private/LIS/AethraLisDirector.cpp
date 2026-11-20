@@ -612,9 +612,15 @@ void AAethraLisDirector::DetectMeetings()
             }
             const uint64 Key = (static_cast<uint64>(Bodies[A]->NpcId) << 32) | static_cast<uint32>(Bodies[B]->NpcId);
             const int64* Previous = LastMet.Find(Key);
-            if (!Previous || S.Hour - *Previous >= 12) // greet the same person at most twice a day
+            const int64* GreetA = LastGreeting.Find(Bodies[A]->NpcId);
+            const int64* GreetB = LastGreeting.Find(Bodies[B]->NpcId);
+            // The same pair at most twice a day, and each villager notes at most one encounter per hour:
+            // walking through the crowd is not twenty separate memories.
+            if ((!Previous || S.Hour - *Previous >= 12) && (!GreetA || *GreetA != S.Hour) && (!GreetB || *GreetB != S.Hour))
             {
                 LastMet.Add(Key, S.Hour);
+                LastGreeting.Add(Bodies[A]->NpcId, S.Hour);
+                LastGreeting.Add(Bodies[B]->NpcId, S.Hour);
                 S.Meet(Bodies[A]->NpcId, Bodies[B]->NpcId);
             }
         }
@@ -736,10 +742,20 @@ void AAethraLisDirector::PlaceViewer(const FVector& Eye, const FVector& LookAt)
     {
         return;
     }
+    // Keep the camera in open air above the terrain and trees at that spot.
+    TArray<EAethraBlock> Column;
+    Voxels->GetColumn(FIntPoint(FMath::FloorToInt(Eye.X / AethraTerrain::CellSizeCm), FMath::FloorToInt(Eye.Y / AethraTerrain::CellSizeCm)), Column);
+    int32 Top = Column.Num() - 1;
+    while (Top > 0 && Column[Top] == EAethraBlock::Air)
+    {
+        --Top;
+    }
+    FVector Safe = Eye;
+    Safe.Z = FMath::Max(Eye.Z, (Top + 3) * AethraTerrain::CellSizeCm);
     Character->GetCharacterMovement()->SetMovementMode(MOVE_Flying);
     Character->GetCharacterMovement()->Velocity = FVector::ZeroVector;
-    Character->SetActorLocation(Eye - FVector(0, 0, 65.0), false, nullptr, ETeleportType::TeleportPhysics);
-    Controller->SetControlRotation((LookAt - Eye).Rotation());
+    Character->SetActorLocation(Safe - FVector(0, 0, 65.0), false, nullptr, ETeleportType::TeleportPhysics);
+    Controller->SetControlRotation((LookAt - Safe).Rotation());
 }
 
 void AAethraLisDirector::RunShots(float DeltaSeconds)
@@ -789,7 +805,7 @@ void AAethraLisDirector::RunShots(float DeltaSeconds)
             Select->Set(0);
         }
         const FVector Forest = CellCentre(Anchor(ELisPlace::Forest));
-        PlaceViewer(Forest + FVector(-1100, -700, 650), Forest);
+        PlaceViewer(Forest + FVector(-900, -700, 900), Forest);
         break;
     }
     case 8:
@@ -961,9 +977,13 @@ void AAethraLisDirector::DrawDebug(UCanvas* Canvas, APlayerController* Controlle
         for (int32 I = Npc->Memories.Num() - 1, Shown = 0; I >= 0 && Shown < 5; --I, ++Shown)
         {
             const FLisMemory& M = Npc->Memories[I];
-            const FLisNpc* Who = S.Find(M.Actor);
-            Lines.Add(FString::Printf(TEXT("   h%lld  %s em %s%s  (%s, confiança %.2f, relevância %.2f)"), M.Hour, LisName(M.Type), LisName(M.Place),
-                M.Actor == LisPlayer ? TEXT(" por jogador") : Who ? *FString::Printf(TEXT(" por %s"), *Who->Identity.Name) : TEXT(""),
+            const bool bMet = M.Type == ELisEvent::Met;
+            const FLisNpc* Who = S.Find(bMet ? (M.Actor == Npc->Identity.Id ? M.Target : M.Actor) : M.Actor);
+            const bool bSelf = !bMet && M.Actor == Npc->Identity.Id;
+            const FString By = M.Actor == LisPlayer ? FString(TEXT(" por jogador"))
+                : bSelf || !Who ? FString()
+                : FString::Printf(TEXT("%s%s"), bMet ? TEXT(": ") : TEXT(" por "), *Who->Identity.Name);
+            Lines.Add(FString::Printf(TEXT("   h%lld  %s em %s%s  (%s, confiança %.2f, relevância %.2f)"), M.Hour, LisName(M.Type), LisName(M.Place), *By,
                 M.Source == ELisSource::Observed ? TEXT("visto") : TEXT("ouvido"), M.Confidence, M.Relevance));
         }
         if (!Body->LastError.IsEmpty())

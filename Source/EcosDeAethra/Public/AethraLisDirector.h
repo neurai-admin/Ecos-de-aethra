@@ -89,6 +89,7 @@ private:
     TArray<int32> PathQueue; // NPC ids waiting for a path
     TMap<int32, TArray<FLisOption>> LastOptions;
     TMap<uint64, int64> LastMet;
+    TMap<int32, int64> LastGreeting;
     TMap<int32, int64> LastBlockHour;
     TArray<FString> RecentLog;
     float HourClock = 0.f;
