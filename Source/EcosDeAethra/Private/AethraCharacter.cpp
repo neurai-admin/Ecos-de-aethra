@@ -25,6 +25,81 @@ AAethraCharacter::AAethraCharacter()
     bUseControllerRotationYaw = true;
 }
 
+void AAethraCharacter::BeginPlay()
+{
+    Super::BeginPlay();
+    FParse::Value(FCommandLine::Get(), TEXT("AethraBench="), BenchSeconds);
+    SetActorTickEnabled(BenchSeconds > 0.0f);
+}
+
+void AAethraCharacter::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    APlayerController* PC = Cast<APlayerController>(GetController());
+    if (BenchSeconds <= 0.0f || !PC)
+    {
+        return;
+    }
+
+    // Same seed + same inputs = repeatable route; 5 s warm-up fills the streaming radius first.
+    // Use with -benchmark -fps=60 for a fixed timestep. Screenshots stay outside the CSV capture.
+    constexpr float WarmUp = 5.0f;
+    BenchElapsed += DeltaSeconds;
+    const float End = WarmUp + BenchSeconds;
+    const auto Crossed = [this, DeltaSeconds](float Time)
+    {
+        return BenchElapsed - DeltaSeconds < Time && BenchElapsed >= Time;
+    };
+    const float Yaw = 70.0f + 35.0f * FMath::Sin(FMath::Min(BenchElapsed, End) * 0.25f);
+    if (BenchElapsed < End)
+    {
+        PC->SetControlRotation(FRotator(-30.0f, Yaw, 0.0f));
+        AddMovementInput(GetActorForwardVector(), 1.0f);
+        if (CanJump())
+        {
+            Jump();
+        }
+    }
+    else if (BenchElapsed < End + 0.6f)
+    {
+        PC->SetControlRotation(FRotator(-2.0f, Yaw, 0.0f)); // eye-level view
+    }
+    else
+    {
+        if (Crossed(End + 0.6f))
+        {
+            // Vista point above the route end, so the horizon screenshot never faces a wall.
+            GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+            SetActorLocation(GetActorLocation() + FVector(0.0, 0.0, 2500.0));
+        }
+        PC->SetControlRotation(FRotator(-8.0f, Yaw, 0.0f));
+    }
+    if (Crossed(WarmUp - 0.5f) || Crossed(End + 0.4f) || Crossed(End + 1.1f))
+    {
+        PC->ConsoleCommand(TEXT("HighResShot 1"));
+    }
+    if (!bBenchCapturing && BenchElapsed >= WarmUp && BenchElapsed < End)
+    {
+        bBenchCapturing = true;
+        NextBenchEdit = BenchElapsed;
+        PC->ConsoleCommand(TEXT("csvprofile start"));
+    }
+    if (bBenchCapturing && BenchElapsed >= NextBenchEdit)
+    {
+        NextBenchEdit += 2.0f;
+        EditBlock(false);
+    }
+    if (bBenchCapturing && BenchElapsed >= End)
+    {
+        bBenchCapturing = false;
+        PC->ConsoleCommand(TEXT("csvprofile stop"));
+    }
+    if (BenchElapsed >= End + 2.0f) // CSV flush and the final screenshots
+    {
+        PC->ConsoleCommand(TEXT("quit"));
+    }
+}
+
 void AAethraCharacter::SetupPlayerInputComponent(UInputComponent* Input)
 {
     Super::SetupPlayerInputComponent(Input);
@@ -133,9 +208,16 @@ void AAethraCharacter::EditBlock(bool bPlace)
     }
     if (!bPlace)
     {
-        if (!Terrain->SetBlock(Target, EAethraBlock::Air))
+        if (!Terrain->SetBlockBy(Target, EAethraBlock::Air, FAethraInstigator::Player()))
         {
             ShowEditFailureUntil = GetWorld()->GetTimeSeconds() + 1.5;
+            return;
+        }
+        // A plant cannot float once its ground is gone.
+        const FIntVector Above = Target + FIntVector(0, 0, 1);
+        if (AethraTerrain::IsPlant(Terrain->GetBlock(Above)))
+        {
+            Terrain->SetBlockBy(Above, EAethraBlock::Air, FAethraInstigator::Player());
         }
         return;
     }
@@ -155,7 +237,8 @@ void AAethraCharacter::EditBlock(bool bPlace)
         Face = FIntVector(0, 0, Normal.Z >= 0 ? 1 : -1);
     }
     const FIntVector Destination = Target + Face;
-    if (Terrain->GetBlock(Destination) != EAethraBlock::Air)
+    const EAethraBlock Occupant = Terrain->GetBlock(Destination);
+    if (!AethraTerrain::IsReplaceable(Occupant)) // blocks replace air, plants and water
     {
         return;
     }
@@ -163,7 +246,7 @@ void AAethraCharacter::EditBlock(bool bPlace)
     const FVector Min = FVector(Destination) * AethraTerrain::CellSizeCm;
     const FBox BlockBounds(Min + FVector(0.1), Min + FVector(AethraTerrain::CellSizeCm - 0.1));
     if (!GetCapsuleComponent()->Bounds.GetBox().Intersect(BlockBounds)
-        && !Terrain->SetBlock(Destination, SelectedBlock))
+        && !Terrain->SetBlockBy(Destination, SelectedBlock, FAethraInstigator::Player()))
     {
         ShowEditFailureUntil = GetWorld()->GetTimeSeconds() + 1.5;
     }

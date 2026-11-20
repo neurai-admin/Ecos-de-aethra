@@ -5,6 +5,7 @@
 
 class AAethraVoxelWorld;
 class APlayerStart;
+class UMaterialInterface;
 
 UCLASS()
 class ECOSDEAETHRA_API AAethraGameMode : public AGameModeBase
@@ -23,6 +24,10 @@ private:
 
     UPROPERTY(Transient)
     TObjectPtr<APlayerStart> VoxelStart;
+
+    // Hard reference so the cooker packages the engine cloud material.
+    UPROPERTY()
+    TObjectPtr<UMaterialInterface> CloudMaterial;
 
     AAethraVoxelWorld* EnsureVoxelWorld();
     void SpawnLighting();
