@@ -45,15 +45,25 @@ FString TraitSummary(const FLisNpc& Npc)
 }
 }
 
-FLisElden::FLisElden(uint32 Seed)
+FLisElden::FLisElden(uint32 Seed, ELisRoster Roster)
     : Sim(Seed)
 {
-    const ELisProfession Roster[] = {
-        ELisProfession::Farmer, ELisProfession::Farmer, ELisProfession::Farmer, ELisProfession::Farmer, ELisProfession::Farmer,
-        ELisProfession::Farmer, ELisProfession::Farmer, ELisProfession::Fisher, ELisProfession::Fisher, ELisProfession::Fisher,
-        ELisProfession::Woodcutter, ELisProfession::Woodcutter, ELisProfession::Woodcutter, ELisProfession::Merchant, ELisProfession::Merchant,
-        ELisProfession::Guard, ELisProfession::Guard, ELisProfession::Guard, ELisProfession::Explorer, ELisProfession::Explorer };
-    for (ELisProfession Profession : Roster)
+    using P = ELisProfession;
+    static const P Experiment[] = {
+        P::Farmer, P::Farmer, P::Farmer, P::Farmer, P::Farmer, P::Farmer, P::Farmer, P::Fisher, P::Fisher, P::Fisher,
+        P::Woodcutter, P::Woodcutter, P::Woodcutter, P::Merchant, P::Merchant, P::Guard, P::Guard, P::Guard, P::Explorer, P::Explorer };
+    // Interleaved so the households (pairs below) mix trades.
+    static const P Living[] = {
+        P::Farmer, P::Woodcutter, P::Farmer, P::Builder, P::Merchant, P::Farmer, P::Woodcutter, P::Builder, P::Farmer, P::Merchant,
+        P::Woodcutter, P::Farmer, P::Fisher, P::Builder, P::Guard, P::Farmer, P::Woodcutter, P::Merchant, P::Fisher, P::Guard };
+    static_assert(UE_ARRAY_COUNT(Experiment) == 20 && UE_ARRAY_COUNT(Living) == 20);
+    if (Roster == ELisRoster::LivingVillage)
+    {
+        Sim.Config.bLivingVillage = true;
+        Sim.World.WoodStore = 6.f; // starting stock in the storage house
+    }
+    const TArrayView<const P> Chosen = Roster == ELisRoster::LivingVillage ? TArrayView<const P>(Living) : TArrayView<const P>(Experiment);
+    for (P Profession : Chosen)
     {
         Sim.AddNpc(Profession, ELisPlace::Village);
     }
