@@ -8,5 +8,6 @@ public class EcosDeAethraTarget : TargetRules
         DefaultBuildSettings = BuildSettingsVersion.V7;
         IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_8;
         ExtraModuleNames.Add("EcosDeAethra");
+        ExtraModuleNames.Add("AethraLIS");
     }
 }
