@@ -15,7 +15,7 @@
 namespace
 {
 constexpr EAutomationTestFlags LisWorldFlags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter;
-constexpr int32 TestSeed = 2026; // not the game seed, so the demo save is never touched
+constexpr int32 LisWorldSeed = 2026; // not the game seed, so the demo save is never touched
 
 // A game world with the voxel terrain and the LIS village, cleaned up afterwards
 // (voxel save slots of the test seed and the LIS save file).
@@ -49,7 +49,7 @@ struct FLisWorldFixture
         FActorSpawnParameters Params;
         Params.bDeferConstruction = true;
         AAethraVoxelWorld* Result = World->SpawnActor<AAethraVoxelWorld>(Params);
-        Result->Seed = TestSeed;
+        Result->Seed = LisWorldSeed;
         Result->FinishSpawning(FTransform::Identity);
         return Result;
     }
@@ -64,8 +64,8 @@ struct FLisWorldFixture
 
     void DeleteSaves() const
     {
-        UGameplayStatics::DeleteGameInSlot(FString::Printf(TEXT("AethraWorld_%d_0"), TestSeed), 0);
-        UGameplayStatics::DeleteGameInSlot(FString::Printf(TEXT("AethraWorld_%d_1"), TestSeed), 0);
+        UGameplayStatics::DeleteGameInSlot(FString::Printf(TEXT("AethraWorld_%d_0"), LisWorldSeed), 0);
+        UGameplayStatics::DeleteGameInSlot(FString::Printf(TEXT("AethraWorld_%d_1"), LisWorldSeed), 0);
         IFileManager::Get().Delete(*SavePath);
     }
 
@@ -402,7 +402,7 @@ bool FLisWorldVoxelSave::RunTest(const FString&)
     Again->PrepareSpawn();
     TestEqual(TEXT("The felled block is restored from the voxel save"), Again->GetBlock(Trunk), EAethraBlock::Air);
     TestTrue(TEXT("The LIS writes its own file, not a voxel slot"), F.Director->SaveFile.EndsWith(TEXT(".lis")) && F.Director->Save()
-        && UGameplayStatics::DoesSaveGameExist(FString::Printf(TEXT("AethraWorld_%d_1"), TestSeed), 0));
+        && UGameplayStatics::DoesSaveGameExist(FString::Printf(TEXT("AethraWorld_%d_1"), LisWorldSeed), 0));
     return true;
 }
 
