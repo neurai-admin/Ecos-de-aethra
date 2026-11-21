@@ -65,6 +65,10 @@ Detalhes em [FLORA.md](FLORA.md).
 | Mobs | Sem zumbis ou monstros hostis tradicionais nesta etapa: o interesse das cavernas vem de geologia, mistério e recursos | — |
 | Fauna | Animais naturais e espécies próprias ficam para o futuro; nenhum animal nesta entrega | [ROADMAP.md](ROADMAP.md) |
 
+## Tipografia (referência de estilo, 21/11/2026)
+
+A Mojangles, fonte do Minecraft (https://pt.minecraft.wiki/w/Mojangles), é só uma **referência de estilo**: letras pixeladas em blocos, de leitura clara no HUD e em placas. Ela pertence à Mojang/Microsoft e **não será usada nem copiada**. Quando a interface for trabalhada, ECOS DE AETHRA terá uma fonte própria nesse espírito, ou uma fonte de licença aberta (OFL) com a licença no repositório. Nada mudou no jogo por enquanto.
+
 ## O que não é
 
 - Não é Minecraft: os modelos, texturas, blocos e mapas são próprios, e nada é cópia.
