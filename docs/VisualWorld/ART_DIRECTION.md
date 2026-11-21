@@ -67,7 +67,24 @@ Detalhes em [FLORA.md](FLORA.md).
 
 ## Tipografia (referência de estilo, 21/11/2026)
 
-A Mojangles, fonte do Minecraft (https://pt.minecraft.wiki/w/Mojangles), é só uma **referência de estilo**: letras pixeladas em blocos, de leitura clara no HUD e em placas. Ela pertence à Mojang/Microsoft e **não será usada nem copiada**. Quando a interface for trabalhada, ECOS DE AETHRA terá uma fonte própria nesse espírito, ou uma fonte de licença aberta (OFL) com a licença no repositório. Nada mudou no jogo por enquanto.
+A Mojangles, fonte do Minecraft (https://pt.minecraft.wiki/w/Mojangles), é só uma **referência de estilo**: letras pixeladas em blocos, de leitura clara no HUD e em placas. Ela pertence à Mojang/Microsoft e **não foi usada nem copiada**.
+
+ECOS DE AETHRA tem **fontes próprias**, desenhadas glifo a glifo em `Tools/Fonts/make_aethra_fonts.py`. O script gera TrueType só com a biblioteca padrão do Python.
+
+| Fonte | Uso | Desenho |
+| --- | --- | --- |
+| Aethra Pixel | Texto, HUD, placas | Maiúsculas 5 × 7, minúsculas com altura-x de 5 e descendentes; pixels quadrados |
+| Aethra Pixel Bold | Avisos e ênfase | Os mesmos glifos um pixel mais pesados, sem fechar os vãos de 1 pixel (m e w continuam abertos) |
+| Aethra Runa | Títulos e nomes de lugares | O mesmo esqueleto com "pixels" octogonais, com ar de pedra lavrada |
+
+- **Cobertura:** 149 glifos. ASCII completo, acentos do português e do espanhol (á à â ã ä é ê í ó ô õ ú ü ç ñ, também em maiúsculas), mais ° º ª « ».
+- **Escala:** 100 unidades por pixel e 1000 por em. As fontes ficam nítidas quando o em é múltiplo de 10 px; o HUD usa 15 pt, que dá 20 px.
+- **Arquivos:**
+  - fontes e amostra em `SourceArt/Fonts` ([specimen](captures/08/fontes-specimen.png));
+  - na UE, Font Faces em `/Game/UI/Fonts` (importadas por `Tools/Editor/import_aethra_fonts.py`, sem hinting, dados embutidos no asset);
+  - o HUD monta as fontes em runtime (`AethraHUD`).
+- **Validação:** os três TTF carregam e renderizam no Windows (GDI+) e no jogo (FreeType da UE).
+- **Direitos:** desenho original de ECOS DE AETHRA; todos os direitos reservados (campo de nome das fontes).
 
 ## O que não é
 

@@ -17,7 +17,7 @@
    - uma só dimensão;
    - sem mobs hostis;
    - Aethra Reachable Horizon Rule;
-   - Mojangles registrada só como referência de estilo.
+   - fontes próprias Aethra Pixel, Pixel Bold e Runa (a Mojangles foi só referência de estilo).
 2. **Materiais:**
    - relevo procedural em todas as superfícies;
    - brilho só nas superfícies encantadas;
@@ -65,7 +65,7 @@
 11. **Fauna** (aves, peixes, insetos, animais de planície, floresta e montanha) com comportamento simplificado em relação ao LIS. Não começa antes de estabilizar os sistemas principais.
 12. **Agricultura e jardinagem:** plantar e cultivar flores; jardins de NPCs e reinos.
 13. **Clima e estações:** chuva nos parâmetros do AME, estação do ano no FloraGen.
-14. **Fonte própria do jogo:** pixelada no espírito da Mojangles, original ou OFL.
+14. **Fontes na interface completa:** Aethra Runa em títulos e nomes de lugares; tamanhos para 4K. As fontes próprias já existem (Aethra Pixel, Pixel Bold e Runa).
 15. **Build empacotada e benchmark nela; outras GPUs; requisitos mínimos reais.**
 
 ## Decisões em aberto (do diretor criativo)
