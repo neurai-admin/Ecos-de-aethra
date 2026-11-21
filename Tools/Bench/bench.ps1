@@ -16,7 +16,10 @@ param(
     [switch]$NoLIS,
     [switch]$Elden,
     # The Visual World prototype instead of the voxel world (its own flight route over the river plain).
-    [switch]$VisualWorld
+    [switch]$VisualWorld,
+    # Visual World graphics profile: 0 Low, 1 Medium, 2 High (default), 3 Ultra.
+    [ValidateRange(0, 3)][int]$Quality = 2,
+    [ValidateSet(1080, 720)][int]$Height = 1080
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'bench-output.ps1')
@@ -37,13 +40,13 @@ Write-Output "Benchmark directory: $out"
 
 $arguments = @()
 if ($exeFile.BaseName -like 'UnrealEditor*') { $arguments += "`"$($projectFile.FullName)`"", '-game' }
-$arguments += '-windowed', '-ResX=1920', '-ResY=1080', '-ForceRes', '-nosound',
+$arguments += '-windowed', "-ResX=$([int]($Height * 16 / 9))", "-ResY=$Height", '-ForceRes', '-nosound',
     "-userdir=`"$out`"", "-abslog=`"$out\run.log`"", "-AethraBench=$Seconds", '"-ExecCmds=r.VSync 0, t.MaxFPS 0"'
 if (-not $RealTime) { $arguments += '-benchmark', '-fps=60' }
 if ($Extra) { $arguments += $Extra }
 if ($NoLIS) { $arguments += '-NoLIS' }
 if ($Elden) { $arguments += '-AethraElden' }
-if ($VisualWorld) { $arguments += '-AethraVisualWorld' }
+if ($VisualWorld) { $arguments += '-AethraVisualWorld', "-dpcvars=aethra.vw.Quality=$Quality" }
 
 $process = Start-Process -FilePath $exeFile.FullName -ArgumentList $arguments -PassThru
 if (-not $process.WaitForExit(($Seconds + 180) * 1000)) {

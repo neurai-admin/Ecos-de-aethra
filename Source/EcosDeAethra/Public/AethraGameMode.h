@@ -20,6 +20,7 @@ public:
     AAethraVoxelWorld* GetVoxelWorld() const;
     // -AethraVisualWorld[=seed]: the Visual World prototype instead of the voxel world.
     static bool IsVisualWorld();
+    AAethraVisualWorld* GetVisualWorld() const;
 
 private:
     UPROPERTY(Transient)

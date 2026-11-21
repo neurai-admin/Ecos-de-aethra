@@ -10,6 +10,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Voxel/AethraTerrain.h"
 #include "Voxel/AethraVoxelChunk.h"
+#include "VisualWorld/AethraVisualWorld.h"
 
 AAethraCharacter::AAethraCharacter()
 {
@@ -186,6 +187,17 @@ void AAethraCharacter::EditBlock(bool bPlace)
     AAethraVoxelWorld* Terrain = Mode ? Mode->GetVoxelWorld() : nullptr;
     if (!Terrain)
     {
+        // Visual World: the same buttons dig into the terrain and the rock, or fill (no blocks there).
+        if (AAethraVisualWorld* Visual = Mode ? Mode->GetVisualWorld() : nullptr)
+        {
+            const FVector From = Camera->GetComponentLocation();
+            FHitResult Hit;
+            FCollisionQueryParams Query(SCENE_QUERY_STAT(AethraDig), true, this);
+            if (GetWorld()->LineTraceSingleByChannel(Hit, From, From + Camera->GetForwardVector() * 800.0, ECC_Visibility, Query) && Hit.GetActor() == Visual)
+            {
+                Visual->Dig(bPlace ? Hit.ImpactPoint + Hit.ImpactNormal * 60.0 : Hit.ImpactPoint - Hit.ImpactNormal * 40.0, bPlace ? 1.f : 1.3f, bPlace);
+            }
+        }
         return;
     }
 

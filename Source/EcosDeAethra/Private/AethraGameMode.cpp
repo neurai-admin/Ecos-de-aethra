@@ -36,6 +36,11 @@ AAethraVoxelWorld* AAethraGameMode::GetVoxelWorld() const
     return VoxelWorld.Get();
 }
 
+AAethraVisualWorld* AAethraGameMode::GetVisualWorld() const
+{
+    return VisualWorld.Get();
+}
+
 AAethraVoxelWorld* AAethraGameMode::EnsureVoxelWorld()
 {
     if (!VoxelWorld)

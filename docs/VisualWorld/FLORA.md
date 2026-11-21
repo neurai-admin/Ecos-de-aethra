@@ -1,50 +1,78 @@
-# Flora — sistema procedural de espécies
+# Aethra FloraGen
 
-Código: `Public/VisualWorld/AethraFlora.h` e `Private/VisualWorld/AethraFlora.cpp`. Atende ao **adendo obrigatório de identidade geométrica da vegetação**.
+Código: `Public/VisualWorld/AethraFlora.h` e `Private/VisualWorld/AethraFlora.cpp`. Atende ao adendo de vegetação e às seções 4 a 7 do Prompt Mestre 08.
 
 ## Regra
 
-**Geometria estilizada, materiais elaborados e diversidade natural.**
+**Geometria estilizada, materiais elaborados e diversidade natural.** Nenhuma planta comum é fotorrealista ou arredondada.
+
+## Árvores (8 espécies, 3 variantes cada)
 
 | Grupo | Forma | Espécies |
 | --- | --- | --- |
-| Árvores comuns | `Blocky`: só caixas (cubos e retângulos), copas em camadas deslocadas e galhos quadrados | Carvalho-de-Elden, Bétula-Clara, Arbusto-de-Blocos, Salgueiro-do-Rio (cortinas retangulares penduradas) |
-| Coníferas | `Conical`: pirâmides quadradas sobrepostas que afinam até a ponta (silhueta triangular) | Pinheiro-Escalonado |
-| Outras espécies | `Angular`: forma própria | Palmeira-Angular (tronco em segmentos inclinados, folhas em lâminas retangulares dobradas) |
-| Raras, antigas ou especiais | `Organic`: curvas, irregular, mais complexa | Árvore Anciã (tronco alargado, raízes, copa de esferas irregulares) |
+| Comuns | `Blocky`: tronco em 3 segmentos de bloco, galhos angulares (caixas a 35–55°) com tufos de cubos, copa em camadas de cubos deslocados | Carvalho-de-Elden, Bétula-Clara, Arbusto-de-Blocos, Salgueiro-do-Rio (cortinas retangulares) |
+| Coníferas | `Conical`: pirâmides quadradas sobrepostas, cada camada levemente girada; silhueta triangular | Pinheiro-Escalonado |
+| Outras | `Angular` | Palmeira-Angular (tronco inclinado em segmentos, folhas em lâminas dobradas) e Árvore-Seca (tronco nu com galhos angulares bifurcados, em lugares secos) |
+| Especiais | `Organic`, rara | Árvore Anciã: tronco alargado, raízes, copa irregular arredondada e manchas de Musgo Luminoso |
 
-Minecraft é só referência de linguagem visual. Nenhum modelo ou textura foi copiado. As árvores comuns não são fotorrealistas nem arredondadas. O teste 13 confirma três pontos:
-- todas as faces das espécies `Blocky` são alinhadas aos eixos;
-- o pinheiro termina em ponta;
-- só a espécie rara é orgânica.
+- **Variantes:** cada espécie tem 3. As variantes mudam a proporção (mais alta e fina, ou mais baixa e larga), o número de galhos e camadas e a posição dos cubos.
+- **Prova (testes 13 e 17):**
+  - a copa das comuns só tem faces alinhadas aos eixos;
+  - o pinheiro termina em ponta;
+  - as variantes diferem;
+  - as três aparecem no mundo.
 
-## Parâmetros por espécie (`FFloraSpecies`)
+## Ecologia
 
-- **Geometria:** forma, altura e largura do tronco, largura e altura da copa, número de camadas, folhas ou módulos.
-- **Materiais:** casca e folhas são superfícies AME (padrões Bark e Leaves, com variação e tonalidade por instância).
-- **Tamanho:** a escala de cada árvore vai de mínimo a máximo, fixada pelo hash da célula.
-- **Vento:** de 0 a 1. O shader desloca os vértices pelo quadrado da altura relativa (UV0.y), com fase pela tonalidade da instância. O tronco fica firme e a copa balança.
-- **Bioma e clima:** peso por bioma, mais temperatura mínima e máxima.
-  - Palmeira: só em praias.
-  - Salgueiro: margens e áreas alagadas.
-  - Pinheiro: montanhas e frio.
-  - Carvalho: só acima de 4 °C.
-  - Árvore Anciã: cerca de 1 em 300 árvores de floresta.
-- **LOD:** tem duas partes.
-  - Distância de desenho e de sombra por espécie (o arbusto some aos 450 m; a anciã fica visível até 4 km).
-  - Nos chunks distantes (L1), fica um subconjunto estável de 40% das árvores, só das espécies marcadas `bFar`.
+`FFloraEnvironment` reúne o que decide onde cada planta nasce:
+- bioma, temperatura, umidade e altitude;
+- inclinação;
+- **exposição ao sol** (normal do terreno em relação ao sol do meio-dia);
+- **fertilidade** (rocha, umidade, inclinação e rios próximos);
+- **disponibilidade de água** e densidade da floresta;
+- estação do ano, reservada para quando houver esse sistema.
 
-## Posição, identidade e persistência
+Com isso:
+- **Espécies por bioma:** a mistura de árvores sai dos pesos por bioma, dos limites de temperatura e umidade (a árvore seca só onde é seco) e de **bosques regionais**. Cada espécie é comum numa região e rara em outra; a bétula vai de 12% a 42% das árvores de floresta conforme a região (teste 15).
+- **Clareiras e áreas abertas:**
+  - florestas ganham clareiras (ruído de 160 m);
+  - campos de flores ficam abertos, com árvores só nas bordas;
+  - a planície fica ampla, para se ver longe.
+- **Flora rasteira:** grade de 1,7 m (capim, samambaia nas florestas, flores esparsas nos campos, flores alpinas nas montanhas), calculada com as amostras do próprio chunk, sem chamadas extras ao gerador.
 
-- **Grade:** uma árvore no máximo por célula de 7 m. `FFloraPlacer::TreeAt(Gerador, Célula)` é função pura da seed e da célula.
-- **Exclusões:** água, distância à margem, platôs de assentamento, ponte e encostas íngremes.
-- **Identidade:** cada árvore tem um id estável (célula de 28 + 28 bits com sinal, mais a espécie). É o mesmo id em L0, em L1 e em qualquer sessão.
-- **Chunks:** cada célula pertence a exatamente um chunk em cada nível. A grade antiga deixava colunas de células sem árvore entre chunks; isso foi corrigido.
-- **Corte:** `AAethraVisualWorld::FellTree(Id)` marca a árvore como cortada em `FFloraLayer`. O arquivo próprio `FLR1` fica ao lado das peças (`Pieces_<seed>.flora`), e o chunk que a contém é reconstruído na hora. Depois de reiniciar, a árvore continua cortada; outra seed não é afetada (teste 14).
+## Campos de flores
 
-Esse é o gancho para a mineração (cortar madeira) e para as ações dos NPCs: o LIS pode pedir `FellTree` pela mesma fila validada que já usa para blocos voxel. Ligar o LIS ao Visual World fica para a próxima fase; nesta branch o LIS não é dependência.
+`FFloraGen::FieldAt` define regiões grandes (ruído de 130 a 280 m, em duas oitavas, com bordas irregulares) onde a ecologia combina:
 
-## Números (seed 125)
+| Campo | Onde | Flores |
+| --- | --- | --- |
+| Girassóis | Planície e campo plano, ensolarado, fértil, de 12 a 32 °C | Girassol de 1,4–2,2 m, cabeça quadrada voltada para o sol, pétalas em lâminas, folhas em caixas |
+| Lavanda | Ensolarado e seco, inclusive colinas baixas; preferência por calcário e arenito | Touceira com espigas roxas |
+| Rosas silvestres | Campos, margens e bordas de floresta úmidas e amenas | Arbusto de cubos com rosas em losango |
+| Flores mistas | Principalmente campos floridos | Margaridas, papoulas e tulipas, em manchas de uma cor |
+| Alpinas | Pastagens frias de montanha | Almofada de musgo com flores-estrela azuis |
 
-- **Densidade:** cerca de 3.990 árvores de 6 espécies numa área de 840 × 840 m (teste 13).
-- **Carga inicial:** 11.262 árvores e 41.781 tufos de grama e flores ao redor do spawn (teste 12).
+- **Densidade:** dentro de um campo forte, de 85% a 90% das plantas são da espécie do campo (66 de 73 girassóis numa área de 15 × 15 m, teste 16).
+- **Área na seed 125**, numa janela de 6 × 6 km: 124 ha de girassóis, 74 de lavanda, 212 de rosas, 222 de flores mistas e 166 de alpinas. Os campos ocupam menos de 35% do terreno; o resto fica aberto.
+- **Visíveis a qualquer distância:** o campo tinge o terreno em todos os níveis (L0, L1 e horizonte), e as flores 3D aparecem perto do jogador.
+- **Movimento:** as flores balançam com o vento do material, pela altura relativa e pela força de vento da espécie.
+
+Outras espécies (lírios, hortênsias, plantas tropicais, aquáticas e espécies próprias de Aethra) entram como novas linhas da tabela `FloraMakeGround()` e novos casos em `FieldAt`.
+
+## Não é só decoração: contratos para o futuro
+
+`EFloraUse` marca o que cada planta pode dar: colheita, sementes, corante (com a cor), perfume, alquimia, polinização, ornamental, alimento, fibra e madeira. Exemplos:
+- girassol: sementes, alimento e corante amarelo;
+- lavanda: perfume e alquimia;
+- rosa: perfume e corante.
+
+Agricultura, jardinagem, comércio, corantes, perfumes e alquimia **ainda não existem**; esses dados são a interface para eles.
+
+## Identidade, corte e LOD
+
+- **Identidade:** cada árvore tem um id estável (célula de 7 m mais a espécie).
+- **Corte:** `FellTree` persiste o corte em `Pieces_<seed>.flora`. Escavar sob uma árvore também a derruba.
+- **LOD:**
+  - chunks distantes mostram 40% das árvores (as mesmas), só as espécies marcadas para longe, com a variante 0;
+  - distâncias de desenho e de sombra variam por espécie e por perfil gráfico;
+  - grama até 75 m e flores até 110–260 m, também escaladas pelo perfil.

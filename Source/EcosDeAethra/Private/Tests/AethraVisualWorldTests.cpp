@@ -11,7 +11,9 @@
 #include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
 #include "Voxel/AethraTerrain.h"
+#include "VisualWorld/AethraCaveGen.h"
 #include "VisualWorld/AethraFlora.h"
+#include "VisualWorld/AethraRuinGen.h"
 #include "VisualWorld/AethraHybridGeometry.h"
 #include "VisualWorld/AethraVisualWorld.h"
 #include "VisualWorld/AethraWorldGen.h"
@@ -23,7 +25,7 @@
 
 namespace
 {
-constexpr int32 Seed = AAethraVisualWorld::DemoSeed;
+constexpr int32 VWSeed = AAethraVisualWorld::DemoSeed;
 
 FString TestDir()
 {
@@ -36,7 +38,7 @@ void CleanTestDir()
 }
 
 // The generator is the expensive part (~0.2 s): one per seed for the whole run.
-const FAethraWorldGen& Gen(int32 S = Seed)
+const FAethraWorldGen& Gen(int32 S = VWSeed)
 {
     static TMap<int32, TUniquePtr<FAethraWorldGen>> Cache;
     TUniquePtr<FAethraWorldGen>& G = Cache.FindOrAdd(S);
@@ -59,7 +61,7 @@ void WithWorld(FBody&& Body)
     World->DestroyWorld(false);
 }
 
-AAethraVisualWorld* StartVisualWorld(UWorld& World, const FString& PiecesFile, int32 S = Seed)
+AAethraVisualWorld* StartVisualWorld(UWorld& World, const FString& PiecesFile, int32 S = VWSeed)
 {
     AAethraVisualWorld* VW = World.SpawnActor<AAethraVisualWorld>();
     VW->Start(S, FVector::ZeroVector, PiecesFile);
@@ -208,7 +210,7 @@ bool FAethraVW03::RunTest(const FString&)
     CleanTestDir();
     // Same seed, two generators: same samples (nothing depends on evaluation order or history).
     const FAethraWorldGen& A = Gen();
-    FAethraWorldGen B(Seed);
+    FAethraWorldGen B(VWSeed);
     int32 Diff = 0;
     FRandomStream R(3);
     for (int32 I = 0; I < 3000; ++I)
@@ -376,7 +378,7 @@ bool FAethraVW05::RunTest(const FString&)
     });
     const TMap<FString, FDateTime> After = Snapshot();
     TestTrue(TEXT("No voxel save created, changed or deleted"), Before.OrderIndependentCompareEqual(After));
-    TestFalse(TEXT("No voxel slot for the Visual World seed"), UGameplayStatics::DoesSaveGameExist(FString::Printf(TEXT("AethraWorld_%d_0"), Seed), 0) && !Before.Contains(FString::Printf(TEXT("AethraWorld_%d_0.sav"), Seed)));
+    TestFalse(TEXT("No voxel slot for the Visual World seed"), UGameplayStatics::DoesSaveGameExist(FString::Printf(TEXT("AethraWorld_%d_0"), VWSeed), 0) && !Before.Contains(FString::Printf(TEXT("AethraWorld_%d_0.sav"), VWSeed)));
     CleanTestDir();
     return true;
 }
@@ -678,7 +680,7 @@ bool FAethraVW12::RunTest(const FString&)
 {
     // Loose limits: they catch serious regressions, not small ones (the frame-rate benchmark is separate).
     double Begin = FPlatformTime::Seconds();
-    FAethraWorldGen G(Seed + 1);
+    FAethraWorldGen G(VWSeed + 1);
     const double InitMs = (FPlatformTime::Seconds() - Begin) * 1000.0;
     FRandomStream R(11);
     constexpr int32 Samples = 200000;
@@ -718,21 +720,33 @@ bool FAethraVW13::RunTest(const FString&)
     {
         AddError(Problem);
     }
-    // Geometric identity: common broadleaf species are boxes only (every face axis-aligned), pines
-    // narrow to a point, only rare species are organic.
+    // Geometric identity: the canopy of common broadleaf species is axis-aligned boxes only (branches
+    // may be angular), pines narrow to a point, only rare species are organic. Variants differ.
     for (const FFloraSpecies& S : FFloraRegistry::All())
     {
+      TSet<int32> VertexCounts;
+      for (int32 Variant = 0; Variant < FFloraRegistry::Variants; ++Variant)
+      {
         FAhgMeshBuilder B;
-        FFloraRegistry::BuildMesh(S, Seed, B);
+        FFloraRegistry::BuildMesh(S, VWSeed, Variant, B);
         TestTrue(*FString::Printf(TEXT("%s has geometry"), S.Name), B.Verts.Num() > 0);
+        int32 Shape = B.Verts.Num();
+        for (const FAhgMeshBuilder::FVert& V : B.Verts)
+        {
+            Shape = HashCombine(Shape, GetTypeHash(FMath::RoundToInt(V.P.X + V.P.Y * 3.f + V.P.Z * 7.f)));
+        }
+        VertexCounts.Add(Shape);
         if (S.Form == EFloraForm::Blocky)
         {
             int32 Slanted = 0;
             for (const FAhgMeshBuilder::FVert& V : B.Verts)
             {
-                Slanted += FMath::Max3(FMath::Abs(V.N.X), FMath::Abs(V.N.Y), FMath::Abs(V.N.Z)) < .999f;
+                if (FMath::RoundToInt(V.Surface) == static_cast<int32>(S.Leaves))
+                {
+                    Slanted += FMath::Max3(FMath::Abs(V.N.X), FMath::Abs(V.N.Y), FMath::Abs(V.N.Z)) < .999f;
+                }
             }
-            TestEqual(*FString::Printf(TEXT("%s is built from boxes only"), S.Name), Slanted, 0);
+            TestEqual(*FString::Printf(TEXT("%s: the canopy is built from cubes only"), S.Name), Slanted, 0);
         }
         if (S.Form == EFloraForm::Conical)
         {
@@ -748,7 +762,9 @@ bool FAethraVW13::RunTest(const FString&)
             }
             TestTrue(*FString::Printf(TEXT("%s narrows to a point (triangular silhouette)"), S.Name), TopWidth < BaseWidth * .3f);
         }
-        TestTrue(*FString::Printf(TEXT("%s: organic only if rare"), S.Name), S.IsCommon() || S.Id == EFloraSpecies::Ancient);
+      }
+      TestTrue(*FString::Printf(TEXT("%s: organic only if rare"), S.Name), S.IsCommon() || S.Id == EFloraSpecies::Ancient);
+      TestTrue(*FString::Printf(TEXT("%s: the variants differ"), S.Name), VertexCounts.Num() > 1);
     }
     // Distribution by biome and temperature.
     TMap<int32, int32> Forest, Beach, Cold;
@@ -837,8 +853,543 @@ bool FAethraVW14::RunTest(const FString&)
     // Another seed is unaffected.
     WithWorld([&](UWorld& World)
     {
-        AAethraVisualWorld* VW = StartVisualWorld(World, FPaths::Combine(TestDir(), TEXT("Other.ahg")), Seed + 7);
+        AAethraVisualWorld* VW = StartVisualWorld(World, FPaths::Combine(TestDir(), TEXT("Other.ahg")), VWSeed + 7);
         TestEqual(TEXT("Another world has nothing felled"), VW->FelledTrees().Num(), 0);
+    });
+    CleanTestDir();
+    return true;
+}
+
+// ================================================================ Prompt 08: FloraGen, fields, horizon,
+// caves, ruins, materials and graphics profiles.
+
+namespace
+{
+FFloraEnvironment EnvAtPoint(const FAethraWorldGen& G, const FVector2D& P)
+{
+    const float DX = G.Height(P + FVector2D(2, 0)) - G.Height(P - FVector2D(2, 0));
+    const float DY = G.Height(P + FVector2D(0, 2)) - G.Height(P - FVector2D(0, 2));
+    return FFloraEnvironment::From(G.Sample(P), FVector3f(-DX / 4.f, -DY / 4.f, 1.f).GetSafeNormal());
+}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAethraVW15, "Aethra.VisualWorld.15.FloraGenEcology", AETHRA_VW_FLAGS)
+bool FAethraVW15::RunTest(const FString&)
+{
+    const FAethraWorldGen& G = Gen();
+    // Ground flora is deterministic and coherent with the place: alpine flowers only in the mountains,
+    // ferns only in forests, nothing under water.
+    int32 Plants = 0, Mismatch = 0, Misplaced = 0;
+    TMap<int32, int32> Species;
+    for (int32 Y = -150; Y < 150; Y += 3)
+    {
+        for (int32 X = -150; X < 150; X += 3)
+        {
+            const FIntPoint C(X * 7, Y * 7);
+            const FVector2D P = FFloraGen::GroundPosition(VWSeed, C);
+            const FFloraEnvironment Env = EnvAtPoint(G, P);
+            FGroundPlant A, B;
+            const bool bA = FFloraGen::GroundAt(VWSeed, C, Env, A), bB = FFloraGen::GroundAt(VWSeed, C, Env, B);
+            Mismatch += bA != bB || (bA && (A.Species != B.Species || A.Position != B.Position));
+            if (!bA)
+            {
+                continue;
+            }
+            ++Plants;
+            Species.FindOrAdd(static_cast<int32>(A.Species))++;
+            Misplaced += Env.bWater;
+            Misplaced += A.Species == EGroundSpecies::AlpineFlower && Env.Biome != EAmeBiome::Mountain && Env.Biome != EAmeBiome::SnowPeak;
+            Misplaced += A.Species == EGroundSpecies::Fern && Env.Biome != EAmeBiome::Forest;
+        }
+    }
+    AddInfo(FString::Printf(TEXT("%d ground plants of %d species sampled over 6 x 6 km"), Plants, Species.Num()));
+    TestEqual(TEXT("Ground flora deterministic"), Mismatch, 0);
+    TestEqual(TEXT("Ground flora where its ecology allows"), Misplaced, 0);
+    TestTrue(TEXT("Varied ground flora (6+ species)"), Species.Num() >= 6);
+    // Ecology matters: the same biome with different moisture gives a different tree mix.
+    FFloraEnvironment Wet, Dry;
+    Wet.Biome = Dry.Biome = EAmeBiome::Plains;
+    Wet.Temperature = Dry.Temperature = 16.f;
+    Wet.Moisture = .9f;
+    Dry.Moisture = .15f;
+    TSet<int32> WetMix, DryMix;
+    for (int32 I = 0; I < 400; ++I)
+    {
+        WetMix.Add(FFloraRegistry::PickAt(Wet, VWSeed, FVector2D(5e6, 5e6), (I + .5f) / 400.f));
+        DryMix.Add(FFloraRegistry::PickAt(Dry, VWSeed, FVector2D(5e6, 5e6), (I + .5f) / 400.f));
+    }
+    TestTrue(TEXT("Dry plains grow dead trees, wet plains do not"), DryMix.Contains(static_cast<int32>(EFloraSpecies::DeadTree)) && !WetMix.Contains(static_cast<int32>(EFloraSpecies::DeadTree)));
+    // Regional groves: the mix of a forest changes from one region to another.
+    FFloraEnvironment Forest;
+    Forest.Biome = EAmeBiome::Forest;
+    Forest.Temperature = 14.f;
+    float Birch[2] = { 0, 0 };
+    for (int32 R = 0; R < 2; ++R)
+    {
+        float Best = R ? 1.f : 0.f;
+        for (int32 K = 0; K < 40; ++K)
+        {
+            const FVector2D P(K * 900.0, 333.0);
+            int32 Count = 0;
+            for (int32 I = 0; I < 200; ++I)
+            {
+                Count += FFloraRegistry::PickAt(Forest, VWSeed, P, (I + .5f) / 200.f) == static_cast<int32>(EFloraSpecies::Birch);
+            }
+            Best = R ? FMath::Min(Best, Count / 200.f) : FMath::Max(Best, Count / 200.f);
+        }
+        Birch[R] = Best;
+    }
+    AddInfo(FString::Printf(TEXT("Birch share in forests: %.0f%% in the richest region, %.0f%% in the poorest"), Birch[0] * 100.f, Birch[1] * 100.f));
+    TestTrue(TEXT("Groves: species shares vary by region"), Birch[0] > Birch[1] * 1.8f);
+    // Resource contracts declared for future systems.
+    TestTrue(TEXT("Sunflowers give seeds and dye"), EnumHasAllFlags(FFloraGen::Get(EGroundSpecies::Sunflower).Uses, EFloraUse::Seeds | EFloraUse::Dye));
+    TestTrue(TEXT("Lavender gives perfume"), EnumHasAnyFlags(FFloraGen::Get(EGroundSpecies::Lavender).Uses, EFloraUse::Perfume));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAethraVW16, "Aethra.VisualWorld.16.FlowerFields", AETHRA_VW_FLAGS)
+bool FAethraVW16::RunTest(const FString&)
+{
+    const FAethraWorldGen& G = Gen();
+    // Fields are large regions in suitable places: count their area in a 6 x 6 km window (20 m grid)
+    // and check each sample against the field's rules.
+    TMap<int32, int32> Area;
+    int32 Broken = 0, Samples = 0;
+    for (int32 Y = -150; Y < 150; ++Y)
+    {
+        for (int32 X = -150; X < 150; ++X)
+        {
+            const FVector2D P(X * 20.0, Y * 20.0);
+            const FFloraEnvironment Env = EnvAtPoint(G, P);
+            const FFieldSample F = FFloraGen::FieldAt(VWSeed, P, Env);
+            ++Samples;
+            if (F.Strength <= .5f)
+            {
+                continue;
+            }
+            Area.FindOrAdd(static_cast<int32>(F.Field))++;
+            Broken += Env.bWater;
+            Broken += F.Field == EFlowerField::Sunflower && (Env.Slope > .14f || (Env.Biome != EAmeBiome::Plains && Env.Biome != EAmeBiome::Meadow));
+            Broken += F.Field == EFlowerField::Alpine && Env.Biome != EAmeBiome::Mountain && Env.Biome != EAmeBiome::SnowPeak;
+        }
+    }
+    FString Report;
+    for (const TPair<int32, int32>& A : Area)
+    {
+        Report += FString::Printf(TEXT("%s %.0f ha; "), FFloraGen::FieldName(static_cast<EFlowerField>(A.Key)), A.Value * .04f);
+    }
+    AddInfo(TEXT("Field areas (6 x 6 km): ") + Report);
+    TestEqual(TEXT("Every field sample follows its ecology"), Broken, 0);
+    TestTrue(TEXT("Sunflower fields exist and are large (> 10 ha)"), Area.FindRef(static_cast<int32>(EFlowerField::Sunflower)) * .04f > 10.f);
+    TestTrue(TEXT("At least 4 kinds of field"), Area.Num() >= 4);
+    TestTrue(TEXT("Fields leave open land too (< 35% of the window)"), [&]() { int32 Sum = 0; for (const TPair<int32, int32>& A : Area) Sum += A.Value; return Sum < Samples * .35f; }());
+    // Inside a strong sunflower field the plants are mostly sunflowers; trees keep out.
+    FVector2D Inside = FVector2D::ZeroVector;
+    for (int32 K = 0; K < 90000 && Inside.IsZero(); ++K)
+    {
+        const FVector2D P((K % 300 - 150) * 20.0, (K / 300 - 150) * 20.0);
+        const FFieldSample F = FFloraGen::FieldAt(VWSeed, P, EnvAtPoint(G, P));
+        if (F.Field == EFlowerField::Sunflower && F.Strength >= 1.f)
+        {
+            Inside = P;
+        }
+    }
+    if (TestFalse(TEXT("A strong sunflower field found"), Inside.IsZero()))
+    {
+        int32 Sun = 0, All = 0, Trees = 0;
+        const int32 CX = FMath::FloorToInt(Inside.X / FFloraGen::GroundCell), CY = FMath::FloorToInt(Inside.Y / FFloraGen::GroundCell);
+        for (int32 J = -4; J <= 4; ++J)
+        {
+            for (int32 I = -4; I <= 4; ++I)
+            {
+                const FIntPoint C(CX + I, CY + J);
+                FGroundPlant Plant;
+                if (FFloraGen::GroundAt(VWSeed, C, EnvAtPoint(G, FFloraGen::GroundPosition(VWSeed, C)), Plant))
+                {
+                    ++All;
+                    Sun += Plant.Species == EGroundSpecies::Sunflower;
+                }
+            }
+        }
+        for (int32 J = -2; J <= 2; ++J)
+        {
+            for (int32 I = -2; I <= 2; ++I)
+            {
+                FFloraTree T;
+                Trees += FFloraPlacer::TreeAt(G, FIntPoint(FMath::FloorToInt(Inside.X / FFloraPlacer::Cell) + I, FMath::FloorToInt(Inside.Y / FFloraPlacer::Cell) + J), T);
+            }
+        }
+        AddInfo(FString::Printf(TEXT("Field at (%.0f, %.0f): %d of %d plants are sunflowers, %d trees in 35 x 35 m"), Inside.X, Inside.Y, Sun, All, Trees));
+        TestTrue(TEXT("A sunflower field is mostly sunflowers"), All > 20 && Sun > All * .6f);
+        TestTrue(TEXT("Fields are open (at most 1 tree)"), Trees <= 1);
+    }
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAethraVW17, "Aethra.VisualWorld.17.TreeLodAndVariants", AETHRA_VW_FLAGS)
+bool FAethraVW17::RunTest(const FString&)
+{
+    CleanTestDir();
+    WithWorld([&](UWorld& World)
+    {
+        AAethraVisualWorld* VW = StartVisualWorld(World, FPaths::Combine(TestDir(), TEXT("Pieces.ahg")));
+        // The far level of a 256 m area keeps a subset of the trees of its four 128 m near chunks,
+        // with the same ids (the same trees, fewer of them), only species marked for far.
+        int32 Far = 0, Near = 0, Foreign = 0, NotFar = 0;
+        TSet<uint64> NearIds;
+        TSet<int32> Variants;
+        for (int32 Y = 4; Y < 8; ++Y)
+        {
+            for (int32 X = 4; X < 8; ++X)
+            {
+                TArray<FFloraTree> T;
+                VW->TreesIn(0, FIntPoint(X, Y), T);
+                Near += T.Num();
+                for (const FFloraTree& Tree : T)
+                {
+                    NearIds.Add(Tree.Id);
+                    Variants.Add(Tree.Variant);
+                }
+            }
+        }
+        for (int32 Y = 2; Y < 4; ++Y)
+        {
+            for (int32 X = 2; X < 4; ++X)
+            {
+                TArray<FFloraTree> T;
+                VW->TreesIn(1, FIntPoint(X, Y), T);
+                Far += T.Num();
+                for (const FFloraTree& Tree : T)
+                {
+                    Foreign += !NearIds.Contains(Tree.Id);
+                    NotFar += !FFloraRegistry::Get(Tree.Species).bFar;
+                }
+            }
+        }
+        AddInfo(FString::Printf(TEXT("512 x 512 m: %d trees near, %d far (%.0f%%), %d variants used"), Near, Far, Near ? 100.f * Far / Near : 0.f, Variants.Num()));
+        TestTrue(TEXT("Trees present"), Near > 100);
+        TestEqual(TEXT("Far trees are a subset of the near trees"), Foreign, 0);
+        TestEqual(TEXT("Far chunks only keep far species"), NotFar, 0);
+        TestTrue(TEXT("Far keeps about 40%"), Far > Near * .25f && Far < Near * .55f);
+        TestEqual(TEXT("All three variants used"), Variants.Num(), FFloraRegistry::Variants);
+        // Profiles scale draw distances only: the trees themselves are the same.
+        TArray<FFloraTree> High, Low;
+        VW->TreesIn(0, FIntPoint(5, 5), High);
+        VW->SetQuality(0);
+        VW->TreesIn(0, FIntPoint(5, 5), Low);
+        TestEqual(TEXT("Low profile: the same trees"), Low.Num(), High.Num());
+        TestTrue(TEXT("Low profile: shorter tree distance"), AAethraVisualWorld::ProfileFor(0).TreeDistance < AAethraVisualWorld::ProfileFor(2).TreeDistance);
+    });
+    CleanTestDir();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAethraVW18, "Aethra.VisualWorld.18.ReachableHorizon", AETHRA_VW_FLAGS)
+bool FAethraVW18::RunTest(const FString&)
+{
+    // Aethra Reachable Horizon Rule: the horizon is the same WorldGen surface, 10 m lower and coarser,
+    // never an invented landscape. Every horizon vertex must match the real ground under it.
+    CleanTestDir();
+    WithWorld([&](UWorld& World)
+    {
+        AAethraVisualWorld* VW = StartVisualWorld(World, FPaths::Combine(TestDir(), TEXT("Pieces.ahg")));
+        VW->FlushHorizon();
+        const FVwProfile& Q = VW->Profile();
+        AddInfo(FString::Printf(TEXT("Profile %s: %d horizon tiles, reach %.1f km (radius %.0f km)"), Q.Name, VW->HorizonTileCount(), VW->HorizonReachM() / 1000.0, Q.HorizonKm));
+        TestTrue(TEXT("The horizon reaches the profile's radius"), VW->HorizonReachM() >= Q.HorizonKm * 1000.0);
+        const FAethraWorldGen& G = VW->Gen();
+        int32 Checked = 0, Wrong = 0;
+        double Worst = 0;
+        for (const FIntPoint Tile : { FIntPoint(0, 0), FIntPoint(-1, 0), FIntPoint(2, -3), FIntPoint(-4, 3) })
+        {
+            const UProceduralMeshComponent* Mesh = VW->HorizonMesh(Tile);
+            if (!TestNotNull(*FString::Printf(TEXT("Tile (%d, %d) built"), Tile.X, Tile.Y), Mesh))
+            {
+                continue;
+            }
+            const FProcMeshSection* S = const_cast<UProceduralMeshComponent*>(Mesh)->GetProcMeshSection(0);
+            for (int32 I = 0; I < S->ProcVertexBuffer.Num(); I += 37)
+            {
+                const FVector V = S->ProcVertexBuffer[I].Position;
+                const double Real = G.Height(FVector2D(V.X / 100.0, V.Y / 100.0)) - 10.0;
+                const double Error = V.Z / 100.0 - Real;
+                if (Error > -1.0) // skirt vertices hang 4 m lower by design
+                {
+                    ++Checked;
+                    Worst = FMath::Max(Worst, FMath::Abs(Error));
+                    Wrong += FMath::Abs(Error) > .01;
+                }
+            }
+        }
+        AddInfo(FString::Printf(TEXT("%d horizon vertices checked against the real ground, worst %.3f m"), Checked, Worst));
+        TestTrue(TEXT("Vertices checked"), Checked > 200);
+        TestEqual(TEXT("The horizon shows the real ground (no invented relief)"), Wrong, 0);
+        // The real terrain near the viewer matches the horizon's geography: same heights at shared points.
+        const UProceduralMeshComponent* Near = VW->ChunkMesh(1, FIntPoint(2, 2));
+        if (Near)
+        {
+            const FProcMeshSection* S = const_cast<UProceduralMeshComponent*>(Near)->GetProcMeshSection(0);
+            int32 Far = 0;
+            for (int32 I = 0; I < S->ProcVertexBuffer.Num(); I += 53)
+            {
+                const FVector V = S->ProcVertexBuffer[I].Position;
+                // Far chunks sit 0.4 m low (and skirts hang 4 m lower still).
+                const double Off = V.Z / 100.0 - G.Height(FVector2D(V.X / 100.0, V.Y / 100.0));
+                Far += FMath::Abs(Off + .4) > .01 && FMath::Abs(Off + 4.4) > .01;
+            }
+            TestEqual(TEXT("Streamed chunks use the same surface"), Far, 0);
+        }
+        // Ruins and the settlement stand on that ground, so the horizon shows where they are.
+        int32 Floating = 0;
+        for (const FRuinSite& R : VW->RuinGen()->Sites())
+        {
+            Floating += !R.bUnderground && FMath::Abs(R.Anchor.Z - G.Height(FVector2D(R.Anchor))) > .01;
+        }
+        TestEqual(TEXT("Surface ruins stand on the real ground"), Floating, 0);
+    });
+    CleanTestDir();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAethraVW19, "Aethra.VisualWorld.19.CaveGeneration", AETHRA_VW_FLAGS)
+bool FAethraVW19::RunTest(const FString&)
+{
+    const FAethraWorldGen& G = Gen();
+    const FVector2D Spawn(0, 0);
+    FAethraCaveGen A(G, Spawn), B(G, Spawn);
+    TestTrue(TEXT("Caves planned"), A.Systems().Num() >= 4);
+    TestEqual(TEXT("Deterministic plan"), A.Systems().Num(), B.Systems().Num());
+    TSet<int32> Kinds;
+    for (const FCaveSystem& S : A.Systems())
+    {
+        Kinds.Add(static_cast<int32>(S.Kind));
+    }
+    AddInfo(FString::Printf(TEXT("%d cave systems of %d kinds, %d volume blocks"), A.Systems().Num(), Kinds.Num(), A.ActiveBlocks().Num()));
+    TestTrue(TEXT("At least 3 kinds of cave"), Kinds.Num() >= 3);
+    const FCaveSystem* Demo = A.DemoSystem();
+    if (!TestNotNull(TEXT("Demo cave"), Demo))
+    {
+        return false;
+    }
+    TestTrue(TEXT("Demo cave near the spawn"), FVector2D(Demo->Entrance).Size() < 800.0);
+    TestTrue(TEXT("Entrance on the surface"), FMath::Abs(Demo->Entrance.Z - G.Height(FVector2D(Demo->Entrance))) < .01);
+    // Reachable: air all the way along the tunnels, from outside to the deepest chamber.
+    int32 Solid = 0, Steps = 0;
+    for (const FCaveTunnel& T : Demo->Tunnels)
+    {
+        for (float U = 0.f; U <= 1.f; U += .02f)
+        {
+            ++Steps;
+            Solid += !A.IsAir(FMath::Lerp(T.A, T.B, U));
+        }
+    }
+    TestEqual(TEXT("The tunnels are open from the entrance to the chambers"), Solid, 0);
+    const FCaveChamber& Deep = Demo->Chambers.Last();
+    TestTrue(TEXT("The deepest chamber is underground (> 8 m of rock above)"), G.Height(FVector2D(Deep.Center)) - (Deep.Center.Z + Deep.Radii.Z) > 3.f && G.Height(FVector2D(Deep.Center)) - Deep.Center.Z > 8.f);
+    // Same density from two generators; rock below the ground, air above it.
+    FRandomStream R(19);
+    int32 Diff = 0, Wrong = 0;
+    for (int32 I = 0; I < 2000; ++I)
+    {
+        const FVector P(R.FRandRange(-800.f, 800.f), R.FRandRange(-800.f, 800.f), 0.f);
+        const float H = G.Height(FVector2D(P));
+        const FVector Q(P.X, P.Y, H + R.FRandRange(-40.f, 40.f));
+        Diff += A.Density(Q) != B.Density(Q);
+        if (!A.Systems().ContainsByPredicate([&Q](const FCaveSystem& S) { return S.Bounds.ExpandBy(4.0).IsInside(Q); }))
+        {
+            if (FMath::Abs(Q.Z - H) > .5f) // the volume samples the ground on a 1 m lattice
+            {
+                Wrong += (Q.Z < H) != !A.IsAir(Q);
+            }
+        }
+    }
+    TestEqual(TEXT("Density deterministic"), Diff, 0);
+    TestEqual(TEXT("Outside caves: rock below the surface, air above"), Wrong, 0);
+    // The entrance block meshes into stylised rock and the height field opens over the cave.
+    FCaveMesh M;
+    A.MeshBlock(FAethraCaveGen::BlockOf(Demo->Entrance - FVector(0, 0, 2.0)), M);
+    AddInfo(FString::Printf(TEXT("Entrance block: %d triangles"), M.Triangles.Num() / 3));
+    TestTrue(TEXT("Entrance block has geometry"), M.Triangles.Num() > 300);
+    TestTrue(TEXT("The height field opens over the cave mouth"), A.CoversColumn(FVector2D(Demo->Entrance), 2.0));
+    TArray<FAethraCaveGen::FFormation> F;
+    A.Formations(*Demo, F);
+    int32 Crystals = 0;
+    for (const FAethraCaveGen::FFormation& X : F)
+    {
+        Crystals += X.Type == 2;
+    }
+    AddInfo(FString::Printf(TEXT("Demo cave (%s): %d formations, %d crystals"), FAethraCaveGen::KindName(Demo->Kind), F.Num(), Crystals));
+    TestTrue(TEXT("Stalactites and stalagmites"), F.Num() > 10);
+    TestTrue(TEXT("The enchanted demo cave has Aetherite crystals"), Demo->Kind != ECaveKind::Enchanted || Crystals > 3);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAethraVW20, "Aethra.VisualWorld.20.ExcavationPersistence", AETHRA_VW_FLAGS)
+bool FAethraVW20::RunTest(const FString&)
+{
+    CleanTestDir();
+    const FString Pieces = FPaths::Combine(TestDir(), TEXT("Pieces.ahg"));
+    FVector Hole = FVector::ZeroVector;
+    int32 TrianglesBefore = 0, TrianglesAfter = 0;
+    WithWorld([&](UWorld& World)
+    {
+        AAethraVisualWorld* VW = StartVisualWorld(World, Pieces);
+        VW->UpdateStreaming(FVector::ZeroVector, 1000);
+        // Dig on open ground, away from caves: a new volume region opens there.
+        const FVector2D At(-60.0, 40.0);
+        Hole = FVector(At.X, At.Y, VW->Gen().Height(At) - .5f);
+        TestFalse(TEXT("Rock before digging"), VW->CaveGen()->IsAir(Hole - FVector(0, 0, .8f)));
+        TestTrue(TEXT("Dig saved"), VW->Dig(Hole * 100.0, 2.5f));
+        TestTrue(TEXT("Air after digging"), VW->CaveGen()->IsAir(Hole - FVector(0, 0, .8f)));
+        const UProceduralMeshComponent* Block = VW->CaveBlockMesh(FAethraCaveGen::BlockOf(Hole));
+        TestNotNull(TEXT("The dug block is meshed"), Block);
+        TestTrue(TEXT("The height field opened there"), VW->CaveGen()->CoversColumn(At, 2.0));
+        TestTrue(TEXT("Edits file written"), IFileManager::Get().FileExists(*VW->CavePath));
+        // Filling puts rock back.
+        TestTrue(TEXT("Fill saved"), VW->Dig((Hole + FVector(0, 0, -1.f)) * 100.0, 1.f, true));
+        TestFalse(TEXT("Rock after filling"), VW->CaveGen()->IsAir(Hole - FVector(0, 0, 1.f)));
+    });
+    WithWorld([&](UWorld& World)
+    {
+        AAethraVisualWorld* VW = StartVisualWorld(World, Pieces);
+        TestEqual(TEXT("Restart: both edits restored"), VW->CaveGen()->Edits().Num(), 2);
+        TestTrue(TEXT("Restart: the hole is still there"), VW->CaveGen()->IsAir(Hole + FVector(-1.6f, 0, -.5f)) && VW->CaveGen()->IsAir(Hole + FVector(1.6f, 0, -.5f)));
+        TestFalse(TEXT("Restart: the filled part is still rock"), VW->CaveGen()->IsAir(Hole - FVector(0, 0, 1.f)));
+    });
+    WithWorld([&](UWorld& World)
+    {
+        AAethraVisualWorld* VW = StartVisualWorld(World, FPaths::Combine(TestDir(), TEXT("Other.ahg")), VWSeed + 7);
+        TestEqual(TEXT("Another world has no edits"), VW->CaveGen()->Edits().Num(), 0);
+    });
+    CleanTestDir();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAethraVW21, "Aethra.VisualWorld.21.RuinGeneration", AETHRA_VW_FLAGS)
+bool FAethraVW21::RunTest(const FString&)
+{
+    const FAethraWorldGen& G = Gen();
+    const FAethraCaveGen Caves(G, FVector2D::ZeroVector);
+    const FAethraRuinGen A(G, &Caves, FVector2D::ZeroVector), B(G, &Caves, FVector2D::ZeroVector);
+    TestEqual(TEXT("Deterministic"), A.Sites().Num(), B.Sites().Num());
+    TSet<int32> Kinds, Cultures;
+    int32 Surface = 0, Underground = 0, InWater = 0, BadCave = 0, NoLore = 0;
+    for (const FRuinSite& S : A.Sites())
+    {
+        Kinds.Add(static_cast<int32>(S.Kind));
+        Cultures.Add(static_cast<int32>(S.Culture));
+        NoLore += S.Lore.Num() < 3;
+        if (S.bUnderground)
+        {
+            ++Underground;
+            BadCave += !Caves.IsAir(S.Anchor + FVector(0, 0, 1.f)) || S.CaveSystem < 0;
+        }
+        else
+        {
+            ++Surface;
+            InWater += G.Sample(FVector2D(S.Anchor)).IsWater();
+        }
+    }
+    AddInfo(FString::Printf(TEXT("%d ruins (%d surface, %d underground), %d kinds, %d cultures"), A.Sites().Num(), Surface, Underground, Kinds.Num(), Cultures.Num()));
+    TestTrue(TEXT("Surface and underground ruins"), Surface > 5 && Underground > 1);
+    TestTrue(TEXT("Varied kinds (5+)"), Kinds.Num() >= 5);
+    TestTrue(TEXT("Several ancient cultures"), Cultures.Num() >= 2);
+    TestEqual(TEXT("No ruin in water"), InWater, 0);
+    TestEqual(TEXT("Underground ruins stand in cave air"), BadCave, 0);
+    TestEqual(TEXT("Every ruin has lore tags"), NoLore, 0);
+    const FRuinSite* Temple = A.Sites().FindByPredicate([](const FRuinSite& S) { return S.Kind == ERuinKind::Temple && !S.bUnderground; });
+    if (TestNotNull(TEXT("A temple"), Temple))
+    {
+        FRuinSite Ruined = *Temple, Intact = *Temple;
+        Ruined.Preservation = .05f;
+        Intact.Preservation = .95f;
+        TArray<FRuinPiece> PiecesRuined, PiecesIntact, P1, P2;
+        FAethraRuinGen::Build(Ruined, VWSeed, PiecesRuined);
+        FAethraRuinGen::Build(Intact, VWSeed, PiecesIntact);
+        FAethraRuinGen::Build(*Temple, VWSeed, P1);
+        FAethraRuinGen::Build(*Temple, VWSeed, P2);
+        int32 Upright[2] = { 0, 0 };
+        for (int32 K = 0; K < 2; ++K)
+        {
+            for (const FRuinPiece& P : K ? PiecesIntact : PiecesRuined)
+            {
+                Upright[K] += P.Shape == EAhgShape::Column && FMath::Abs(P.Transform.GetRotation().Rotator().Pitch) < 30.f && P.Transform.GetScale3D().Z > 4.f;
+            }
+        }
+        AddInfo(FString::Printf(TEXT("Temple: %d pieces; whole columns %d when ruined, %d when well kept"), P1.Num(), Upright[0], Upright[1]));
+        TestTrue(TEXT("Same site, same pieces"), P1.Num() == P2.Num() && P1.Num() > 30);
+        TestTrue(TEXT("Preservation decides how much still stands"), Upright[1] > Upright[0] + 3);
+    }
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAethraVW22, "Aethra.VisualWorld.22.MaterialIntegrity", AETHRA_VW_FLAGS)
+bool FAethraVW22::RunTest(const FString&)
+{
+    // No plasticine: natural surfaces are rough, never metallic, never glowing (except the enchanted
+    // ones), and every surface has some procedural relief.
+    int32 Plastic = 0, Smooth = 0, Glowing = 0;
+    for (const FAmeMaterialDef& D : FAmeRegistry::All())
+    {
+        const bool bNatural = D.Category == EAmeCategory::Terrain || D.Category == EAmeCategory::Rock || D.Category == EAmeCategory::Vegetation;
+        if (bNatural && (D.Roughness < .34f || D.Metallic > 0.f))
+        {
+            AddError(FString::Printf(TEXT("%s looks plastic (roughness %.2f, metallic %.2f)"), D.Name, D.Roughness, D.Metallic));
+            ++Plastic;
+        }
+        Smooth += FAmeRegistry::BumpCm(D) <= 0.f;
+        Glowing += D.Glow > 0.f && D.Id != EAmeSurface::Aetherite && D.Id != EAmeSurface::GlowMoss;
+        TestTrue(*FString::Printf(TEXT("%s has colour variation"), D.Name), D.Variation > 0.f || D.Base != D.Accent);
+    }
+    TestEqual(TEXT("No plastic-looking natural surface"), Plastic, 0);
+    TestEqual(TEXT("Every surface has relief"), Smooth, 0);
+    TestEqual(TEXT("Only enchanted surfaces glow"), Glowing, 0);
+    TestTrue(TEXT("The palette fits 64 surfaces"), FAmeRegistry::All().Num() <= FAmeRegistry::PaletteWidth);
+    // Every flora mesh uses AME surfaces only (one material, shared textures: no per-plant textures).
+    int32 Bad = 0;
+    for (const FGroundSpecies& S : FFloraGen::Ground())
+    {
+        FAhgMeshBuilder B;
+        FFloraGen::BuildMesh(S, VWSeed, B);
+        for (const FAhgMeshBuilder::FVert& V : B.Verts)
+        {
+            Bad += V.Surface < 0.f || V.Surface >= static_cast<float>(EAmeSurface::Count);
+        }
+        TestTrue(*FString::Printf(TEXT("%s has geometry"), S.Name), B.Verts.Num() > 0);
+    }
+    TestEqual(TEXT("Flora uses AME surfaces"), Bad, 0);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAethraVW23, "Aethra.VisualWorld.23.GraphicsProfiles", AETHRA_VW_FLAGS)
+bool FAethraVW23::RunTest(const FString&)
+{
+    for (int32 Q = 1; Q < 4; ++Q)
+    {
+        const FVwProfile& A = AAethraVisualWorld::ProfileFor(Q - 1), &B = AAethraVisualWorld::ProfileFor(Q);
+        TestTrue(*FString::Printf(TEXT("%s draws no less than %s"), B.Name, A.Name), B.NearRadius >= A.NearRadius && B.FarRadius >= A.FarRadius && B.HorizonKm >= A.HorizonKm
+            && B.GroundDensity >= A.GroundDensity && B.ShadowDistance >= A.ShadowDistance);
+    }
+    CleanTestDir();
+    WithWorld([&](UWorld& World)
+    {
+        AAethraVisualWorld* VW = StartVisualWorld(World, FPaths::Combine(TestDir(), TEXT("Pieces.ahg")));
+        VW->SetQuality(0);
+        VW->UpdateStreaming(FVector::ZeroVector, 1000);
+        const int32 LowChunks = VW->ChunkCount(0) + VW->ChunkCount(1);
+        const int32 LowRuins = VW->RuinPieceCount();
+        TArray<FFloraTree> LowTrees;
+        VW->TreesIn(0, FIntPoint(1, 1), LowTrees);
+        VW->SetQuality(3);
+        VW->UpdateStreaming(FVector::ZeroVector, 1000);
+        const int32 UltraChunks = VW->ChunkCount(0) + VW->ChunkCount(1);
+        TArray<FFloraTree> UltraTrees;
+        VW->TreesIn(0, FIntPoint(1, 1), UltraTrees);
+        AddInfo(FString::Printf(TEXT("Chunks: Low %d, Ultra %d"), LowChunks, UltraChunks));
+        TestTrue(TEXT("Low draws less"), LowChunks < UltraChunks);
+        TestEqual(TEXT("Same world: same trees"), LowTrees.Num(), UltraTrees.Num());
+        TestEqual(TEXT("Same world: same ruins"), VW->RuinPieceCount(), LowRuins);
+        TestEqual(TEXT("Same world: same caves"), VW->CaveGen()->Systems().Num(), FAethraCaveGen(VW->Gen(), VW->bHasSettlement ? VW->SettlementCenter : FVector2D::ZeroVector).Systems().Num());
     });
     CleanTestDir();
     return true;

@@ -6,7 +6,23 @@ Arquivo: `Source/EcosDeAethra/Private/Tests/AethraVisualWorldTests.cpp`. Os test
 & 'D:\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' 'D:\ECOS_DE_AETHRA_VW\EcosDeAethra.uproject' -Unattended -NullRHI -NoSound '-ExecCmds=Automation RunTests Aethra' '-TestExit=Automation Test Queue Empty'
 ```
 
-## Resultado (20/11/2026): 21 de 21 passam
+## Prompt 08 (20/11/2026): 30 de 30 passam
+
+São 23 testes `Aethra.VisualWorld` (01 a 14, mais os novos 15 a 23) e os 7 `Aethra.Voxel`, que não foram alterados.
+
+| Teste novo | Verifica | Medido |
+| --- | --- | --- |
+| 15 FloraGenEcology | Flora rasteira determinística e no lugar certo; a umidade muda a mistura de espécies; bosques regionais; contratos de uso | 8 espécies; bétula de 12% a 42% das árvores conforme a região |
+| 16 FlowerFields | Ecologia de cada campo; área; campos abertos; densidade | Girassóis 124 ha; 66 de 73 plantas são girassóis; 0 árvores no campo |
+| 17 TreeLodAndVariants | O L1 é um subconjunto das árvores do L0; 3 variantes; perfis mudam só a distância | 661 árvores perto e 232 longe (35%) |
+| 18 ReachableHorizon | Vértices do horizonte batem com a altura real; chunks e ruínas na mesma superfície | Diferença máxima de 0,000 m; alcance de 24,1 km |
+| 19 CaveGeneration | Plano determinístico, 4 tipos, túneis abertos até a câmara, malha e abertura do terreno, formações | 24 sistemas; 28 cristais na caverna encantada |
+| 20 ExcavationPersistence | Escavar e preencher persistem ao reiniciar; outra seed intacta | — |
+| 21 RuinGeneration | Determinismo, variedade de tipos e culturas, nenhuma ruína na água, ruínas subterrâneas no ar da caverna, lore, decadência | 24 ruínas, 8 tipos, 3 culturas |
+| 22 MaterialIntegrity | Regras contra aparência de massinha | — |
+| 23 GraphicsProfiles | Perfis em ordem crescente; o perfil Baixo tem o mesmo mundo | 64 chunks no Baixo, 268 no Ultra |
+
+## Protótipo 01: 21 de 21 passam
 
 | Teste | Verifica | Medido |
 | --- | --- | --- |

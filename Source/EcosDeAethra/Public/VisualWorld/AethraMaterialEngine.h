@@ -25,6 +25,9 @@ enum class EAmeSurface : uint8
     Moss, BarkOak, BarkBirch, BarkPine, LeavesBroad, LeavesNeedle, LeavesBirch, Reed,
     WoodPlank, CutStone, Brick, Mortar, RoofTile, Ceramic, Plaster, Iron, Bronze,
     OreCopper, OreIron, Crystal,
+    // Prompt 08: flowers, ferns and the cave set (Aetherite is an original Aethra mineral).
+    PetalSunflower, SunflowerDisk, PetalRose, PetalLavender, PetalDaisy, PetalPoppy, PetalAlpine, Fern,
+    Aetherite, GlowMoss,
     Count
 };
 
@@ -41,6 +44,7 @@ struct FAmeMaterialDef
     EAmePattern Pattern = EAmePattern::Noise;
     float PatternScale = 1.f; // pattern repeats per metre
     float Wear = 0.f;         // how much edges and exposure lighten/darken it 0..1
+    float Glow = 0.f;         // self-illumination (enchanted minerals and plants), 0 for natural surfaces
 };
 
 // Environment at a point, as the world generator sees it. Ranges are documented per field.
@@ -85,8 +89,11 @@ public:
     // Every id once, in order, unique names, parameters in range. Returns the problems found.
     static TArray<FString> Validate();
     // Palette texture read by M_AethraSurface: 64 x 4 float texels, one column per surface.
-    // Row 0 base rgb + variation, row 1 accent rgb + wear, row 2 roughness, metallic, pattern, scale.
+    // Row 0 base rgb + variation, row 1 accent rgb + wear, row 2 roughness, metallic, pattern, scale,
+    // row 3 category, bump depth (cm).
     static UTexture2D* CreatePalette(UObject* Outer);
+    // Depth of the procedural bump in centimetres (palette row 3, green).
+    static float BumpCm(const FAmeMaterialDef& Def);
     static constexpr int32 PaletteWidth = 64;
     static constexpr int32 PaletteRows = 4;
 };
