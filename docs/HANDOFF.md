@@ -1,5 +1,15 @@
 # Passagem de trabalho entre agentes
 
+## Correções do Marco 02
+
+A branch `codex/marco-02-correcoes` parte de `b0e4cc7` e integra primeiro em `claude/marco-02-graficos` após aprovação. Faça edições e builds na worktree própria. Os pacotes do Marco 01 e 02 continuam nas pastas originais em `D:\ECOS_DE_AETHRA`.
+
+- AFS está desabilitado no descritor e no INI compartilhado. Uma primeira tentativa só pelo INI fez a Unreal gerar outra credencial. Se uma futura distribuição Android exigir AFS, habilite-o no checkout privado de distribuição e mantenha as credenciais no override local ignorado `Config/UserEngine.ini`. As credenciais históricas continuam expostas. A retirada ou substituição de eventuais builds Android de desenvolvimento e uma limpeza coordenada do histórico dependem de aprovação.
+- `Tools/Bench/bench.ps1` cria uma pasta exclusiva em `Saved/Bench` na própria worktree. Aqueça o pacote com uma execução curta e rode a medição em outra captura. O modo padrão mede 60 segundos simulados. Use `-RealTime` para a captura em tempo real e confira `duration` no resumo.
+- Para repetir a validação das junções, execute `Automation RunTests Aethra.Voxel`. O caso `ChunkSeams` verifica faces e cores de vértices nas bordas, em cantos positivos e negativos, e após descarregar e recarregar a região.
+- Empacote em saída vazia dentro da worktree, com cook completo. Se uma execução de cook não encerrar, preserve o log e o PID, registre se houve saída válida e mantenha o teste de cook limpo pendente. O reaproveitamento via `-skipcook` é um contorno histórico e exige verificar a origem dos assets.
+- Consulte [TEST_REPORT.md](TEST_REPORT.md) para o resultado dos testes, as medições e a validação do pacote.
+
 Este arquivo registra o estado para que GPT/Codex e Claude Code alternem no mesmo projeto sem perder progresso. Atualize-o ao encerrar cada sessão.
 
 ## Estado em 19/11/2026 (fim do Marco 02, Claude Code)
@@ -43,7 +53,7 @@ powershell -ExecutionPolicy Bypass -File D:\ECOS_DE_AETHRA\Tools\Bench\bench.ps1
 
 Para medir a build empacotada, passe `-Exe D:\ECOS_DE_AETHRA\Builds\Marco02\Windows\EcosDeAethra.exe`. Após mudar materiais, rode `Tools/Editor/create_voxel_material.py` pelo editor (ver cabeçalho do script) e faça um benchmark curto de aquecimento antes de medir, porque a primeira execução compila shaders.
 
-Empacotamento: `RunUAT.bat BuildCookRun ... -cook -stage -pak -iostore -archive -archivedirectory=D:\ECOS_DE_AETHRA\Builds\Marco02`. No UE 5.8.4 o cook pode travar ao sair depois de `LogCook: Display: Done!`; finalize o `UnrealEditor-Cmd` e repita com `-skipcook`.
+O empacotamento original em `D:\ECOS_DE_AETHRA\Builds\Marco02` usou `-skipcook` após o cook chegar a `LogCook: Display: Done!` e travar no encerramento. Preserve esse pacote e use uma pasta nova para as validações.
 
 ## Regras combinadas
 

@@ -208,7 +208,7 @@ void AAethraCharacter::EditBlock(bool bPlace)
     }
     if (!bPlace)
     {
-        if (!Terrain->SetBlock(Target, EAethraBlock::Air))
+        if (!Terrain->SetBlockBy(Target, EAethraBlock::Air, FAethraInstigator::Player()))
         {
             ShowEditFailureUntil = GetWorld()->GetTimeSeconds() + 1.5;
             return;
@@ -217,7 +217,7 @@ void AAethraCharacter::EditBlock(bool bPlace)
         const FIntVector Above = Target + FIntVector(0, 0, 1);
         if (AethraTerrain::IsPlant(Terrain->GetBlock(Above)))
         {
-            Terrain->SetBlock(Above, EAethraBlock::Air);
+            Terrain->SetBlockBy(Above, EAethraBlock::Air, FAethraInstigator::Player());
         }
         return;
     }
@@ -246,7 +246,7 @@ void AAethraCharacter::EditBlock(bool bPlace)
     const FVector Min = FVector(Destination) * AethraTerrain::CellSizeCm;
     const FBox BlockBounds(Min + FVector(0.1), Min + FVector(AethraTerrain::CellSizeCm - 0.1));
     if (!GetCapsuleComponent()->Bounds.GetBox().Intersect(BlockBounds)
-        && !Terrain->SetBlock(Destination, SelectedBlock))
+        && !Terrain->SetBlockBy(Destination, SelectedBlock, FAethraInstigator::Player()))
     {
         ShowEditFailureUntil = GetWorld()->GetTimeSeconds() + 1.5;
     }

@@ -94,6 +94,11 @@ void AAethraVoxelWorld::Tick(float DeltaSeconds)
             Horizon->Update(Seed, Center, StreamingRadius);
         }
     }
+    UpdateStreaming(Center);
+}
+
+void AAethraVoxelWorld::UpdateStreaming(FIntPoint Center)
+{
     for (auto It = Loaded.CreateIterator(); It; ++It)
     {
         const FIntPoint Offset = It.Key() - Center;
@@ -157,7 +162,32 @@ EAethraBlock AAethraVoxelWorld::GetBlock(FIntVector Cell) const
     return Column[Cell.Z];
 }
 
+void AAethraVoxelWorld::GetColumn(FIntPoint Point, TArray<EAethraBlock>& OutColumn) const
+{
+    OutColumn.SetNumUninitialized(Height);
+    if (!Contains(FIntVector(Point.X, Point.Y, 0)))
+    {
+        for (EAethraBlock& Block : OutColumn)
+        {
+            Block = EAethraBlock::Air;
+        }
+        return;
+    }
+    TStaticArray<EAethraBlock, Height> Column;
+    GenerateColumn(Point, Seed, Column);
+    for (int32 Z = 0; Z < Height; ++Z)
+    {
+        OutColumn[Z] = Column[Z];
+    }
+    ApplyColumnEdits(Point, OutColumn);
+}
+
 bool AAethraVoxelWorld::SetBlock(FIntVector Cell, EAethraBlock Block)
+{
+    return SetBlockBy(Cell, Block, FAethraInstigator());
+}
+
+bool AAethraVoxelWorld::SetBlockBy(FIntVector Cell, EAethraBlock Block, const FAethraInstigator& By)
 {
     Initialize();
     if (!Contains(Cell) || Cell.Z == 0 || !IsKnownBlock(Block) || !bSaveWritable || bNotifying)
@@ -213,23 +243,20 @@ bool AAethraVoxelWorld::SetBlock(FIntVector Cell, EAethraBlock Block)
     if (const auto* Chunk = Loaded.Find(Coordinate))
     {
         (*Chunk)->SetBlock(BlockIndex, Block);
-        (*Chunk)->Rebuild(*this);
     }
 
-    const FIntPoint Adjacent[] = {
-        { Coordinate.X - 1, Coordinate.Y }, { Coordinate.X + 1, Coordinate.Y },
-        { Coordinate.X, Coordinate.Y - 1 }, { Coordinate.X, Coordinate.Y + 1 }
-    };
-    const bool bOnEdge[] = {
-        Local.X == 0, Local.X == ChunkSize - 1, Local.Y == 0, Local.Y == ChunkSize - 1
-    };
-    for (int32 Edge = 0; Edge < UE_ARRAY_COUNT(Adjacent); ++Edge)
+    // A corner column contributes to vertex AO in the diagonal chunk as well as both side chunks.
+    const int32 MinX = Local.X == 0 ? -1 : 0;
+    const int32 MaxX = Local.X == ChunkSize - 1 ? 1 : 0;
+    const int32 MinY = Local.Y == 0 ? -1 : 0;
+    const int32 MaxY = Local.Y == ChunkSize - 1 ? 1 : 0;
+    for (int32 Y = MinY; Y <= MaxY; ++Y)
     {
-        if (bOnEdge[Edge])
+        for (int32 X = MinX; X <= MaxX; ++X)
         {
-            if (const auto* Neighbor = Loaded.Find(Adjacent[Edge]))
+            if (const auto* Chunk = Loaded.Find(Coordinate + FIntPoint(X, Y)))
             {
-                (*Neighbor)->Rebuild(*this);
+                (*Chunk)->Rebuild(*this);
             }
         }
     }
@@ -238,6 +265,7 @@ bool AAethraVoxelWorld::SetBlock(FIntVector Cell, EAethraBlock Block)
     Change.Cell = Cell;
     Change.Before = Before;
     Change.After = Block;
+    Change.Instigator = By;
     TGuardValue<bool> Guard(bNotifying, true);
     OnBlockChanged.Broadcast(Change);
     return true;

@@ -22,3 +22,6 @@
 # Packaged build archived by UAT (not source)
 /Windows/
 /Builds/
+
+# Local Unreal Engine overrides can contain development credentials.
+/Config/UserEngine.ini

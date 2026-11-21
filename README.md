@@ -24,10 +24,10 @@ O pacote Win64 Development do Marco 01 abre por `D:\ECOS_DE_AETHRA\Windows\EcosD
 | F1, F2, F3 | Selecionar distância e qualidade gráfica |
 | Console `aethra.Horizon 0/1` | Desligar ou ligar o horizonte distante |
 
-Benchmark repetível a 1080p (rota fixa, captura CSV e screenshots em `Saved/Bench/<nome>`):
+Benchmark repetível a 1080p. Cada execução guarda a captura CSV e as imagens em uma nova pasta em `Saved/Bench`:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File Tools\Benchench.ps1 -Name minha-medicao -Seconds 60
+powershell -ExecutionPolicy Bypass -File Tools\Bench\bench.ps1 -Name minha-medicao -Seconds 60
 ```
 
 Os materiais `M_AethraVoxel` e `M_AethraPlant` são gerados por `Tools/Editor/create_voxel_material.py`. Consulte a [passagem de trabalho](docs/HANDOFF.md) antes de continuar o desenvolvimento.
