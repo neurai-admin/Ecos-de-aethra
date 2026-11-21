@@ -14,7 +14,9 @@ param(
     [switch]$RealTime,
     # Runs the voxel world without the LIS villagers, to measure the cost of the NPC integration.
     [switch]$NoLIS,
-    [switch]$Elden
+    [switch]$Elden,
+    # The Visual World prototype instead of the voxel world (its own flight route over the river plain).
+    [switch]$VisualWorld
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'bench-output.ps1')
@@ -41,6 +43,7 @@ if (-not $RealTime) { $arguments += '-benchmark', '-fps=60' }
 if ($Extra) { $arguments += $Extra }
 if ($NoLIS) { $arguments += '-NoLIS' }
 if ($Elden) { $arguments += '-AethraElden' }
+if ($VisualWorld) { $arguments += '-AethraVisualWorld' }
 
 $process = Start-Process -FilePath $exeFile.FullName -ArgumentList $arguments -PassThru
 if (-not $process.WaitForExit(($Seconds + 180) * 1000)) {
