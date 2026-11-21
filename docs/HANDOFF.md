@@ -66,3 +66,23 @@ O empacotamento original em `D:\ECOS_DE_AETHRA\Builds\Marco02` usou `-skipcook` 
 ## Próximas tarefas sugeridas
 
 Consulte as pendências do Marco 02 em [TEST_REPORT.md](TEST_REPORT.md). A mais importante para o p99 é gerar a malha dos chunks no thread pool.
+
+## LIS 02 (Claude Code, 20/11/2026): integração experimental
+
+Seção acrescentada sem alterar o texto acima.
+
+| Item | Local |
+| --- | --- |
+| Integração experimental | Branch `claude/lis-world-integration-01`, worktree `D:\ECOS_DE_AETHRA_LISW`, criada sobre `codex/marco-02-correcoes` (`095df36`) com merge de `claude/lis-core-01` e `claude/voxel-contract-lis-01` |
+| Extensão do contrato voxel | Branch `claude/voxel-contract-lis-01`: `FAethraInstigator`, `SetBlockBy`, `GetColumn`; `SetBlock` mantido. Proposta em [VOXEL_CONTRACT_INSTIGATOR.md](VOXEL_CONTRACT_INSTIGATOR.md). Precisa de revisão do GPT/Codex |
+| Documentação | [LIS/INTEGRATION_LIS02.md](LIS/INTEGRATION_LIS02.md) |
+
+Arquivos do GPT/Codex tocados nessa integração:
+- `AethraGameMode.cpp`: cria o diretor do LIS; `-NoLIS` desliga.
+- `EcosDeAethra.Build.cs`: dependência de `AethraLIS`.
+- `AethraCharacter.cpp` (na branch do contrato): edições marcadas como do jogador.
+- `bench.ps1`: opção `-NoLIS` e o valor `-dpcvars=aethra.lis.Debug=0` acrescentado à lista permitida de `-Extra`.
+
+O formato do save voxel não mudou.
+
+Rotina de verificação dessa branch: os mesmos comandos acima, com `D:\ECOS_DE_AETHRA_LISW` e `RunTests Aethra`.

@@ -44,7 +44,7 @@ constexpr float Satisfies[NumActions][NumNeeds] = {
 
 constexpr int32 Durations[NumActions] = { 1, 1, 7, 3, 3, 3, 1, 1, 1, 1, 2, 4, 3, 0 };
 
-constexpr float BaseRelevance[LisNum<ELisEvent>()] = { .8f, .7f, .4f, .5f, .2f, .5f, .6f, .2f, .5f, .7f, .8f, .5f, .3f };
+constexpr float BaseRelevance[LisNum<ELisEvent>()] = { .8f, .7f, .4f, .5f, .2f, .5f, .6f, .2f, .5f, .7f, .8f, .5f, .3f, .05f, .15f };
 
 bool IsOutdoor(ELisPlace Place)
 {
@@ -113,6 +113,7 @@ float Interpret(const FLisNpc& Npc, const FLisEventRecord& E)
     case ELisEvent::Conflict: V = (bTarget || bActor) ? -.7f + .5f * P[ELisTrait::Aggression] : -.4f * P[ELisTrait::Caution] - .3f * P[ELisTrait::Empathy] + .4f * P[ELisTrait::Aggression]; break;
     case ELisEvent::Danger: V = -(.3f + .5f * P[ELisTrait::Caution] - .3f * P[ELisTrait::Courage]) * (bTarget ? 1.5f : 1.f); break;
     case ELisEvent::DangerRepelled: V = .3f + .4f * P[ELisTrait::Loyalty]; break;
+    case ELisEvent::Met: V = .1f + .2f * P[ELisTrait::Sociability]; break;
     default: break;
     }
     return FMath::Clamp(V, -1.f, 1.f);
@@ -599,10 +600,15 @@ FLisOption FLisSimulation::Decide(FLisNpc& Npc)
     Npc.Intent = Best.Action;
     Npc.IntentPlace = Best.Place;
     Npc.IntentTarget = Best.Target;
+    if (OnDecision)
+    {
+        OnDecision(Npc, Options);
+    }
     if (Npc.Place != Best.Place)
     {
         Npc.Current = ELisAction::Travel;
-        Npc.BusyUntil = Hour + TravelHours(Npc.Place, Best.Place);
+        // External travel ends when the world calls Arrive or TravelFailed, not after a fixed time.
+        Npc.BusyUntil = Config.bExternalTravel ? MAX_int64 : Hour + TravelHours(Npc.Place, Best.Place);
         ++Npc.ActionCount[LisIdx(ELisAction::Travel)];
     }
     else
@@ -1066,7 +1072,8 @@ int32 FLisSimulation::EmitAtCell(ELisEvent Type, ELisPlace Place, int32 Actor, f
     const bool bInRange = FVector(Offset.X, Offset.Y, 0.f).Size() <= Config.PerceptionRadiusCells;
     for (FLisNpc& Npc : Npcs)
     {
-        if ((bInRange && IsPresent(Npc, Place)) || Npc.Identity.Id == Actor)
+        const bool bSees = Perceives ? Perceives(Npc, Cell) : bInRange && IsPresent(Npc, Place);
+        if (bSees || Npc.Identity.Id == Actor)
         {
             Remember(Npc, E, ELisSource::Observed, LisNobody, 1.f);
         }
@@ -1138,7 +1145,8 @@ void FLisSimulation::Remember(FLisNpc& Npc, const FLisEventRecord& E, ELisSource
         {
             B.Stock = FMath::Max(0.f, B.Stock - E.Amount * W);
         }
-        if (bWorkplace)
+        // A colleague working the same place is doing the job, not stealing it.
+        if (bWorkplace && !(Find(E.Actor) && LisWorkplace(Find(E.Actor)->Identity.Profession) == E.Place))
         {
             Npc.Need(ELisNeed::Purpose) += .2f * W;
             TouchRelation(E.Actor, [&](FLisRelation& R) { R.Resentment += .15f * W * (.5f + P[ELisTrait::Aggression]); R.Trust -= .05f * W; });
@@ -1202,6 +1210,9 @@ void FLisSimulation::Remember(FLisNpc& Npc, const FLisEventRecord& E, ELisSource
         B.Risk += (Source == ELisSource::Observed ? .45f : .25f * Confidence) * (1.f - B.Risk);
         Npc.Need(ELisNeed::Safety) += bTarget ? .5f : .2f * W;
         break;
+    case ELisEvent::Met:
+        TouchRelation(bActor ? E.Target : E.Actor, [&](FLisRelation& R) { R.Affection += .01f * (.5f + P[ELisTrait::Sociability]); R.Trust += .005f; });
+        break;
     case ELisEvent::DangerRepelled:
         B.Risk *= .85f;
         TouchRelation(E.Actor, [&](FLisRelation& R) { R.Respect += .1f * W; R.Trust += .04f * W; });
@@ -1224,7 +1235,9 @@ void FLisSimulation::Remember(FLisNpc& Npc, const FLisEventRecord& E, ELisSource
     M.ToldBy = ToldBy;
     M.Confidence = Confidence;
     M.Valence = Interpret(Npc, E);
-    M.Relevance = BaseRelevance[LisIdx(E.Type)] + (bTarget || bActor ? .5f : 0.f) + (bWorkplace ? .25f : 0.f);
+    // Routine notes (arrivals, greetings) stay low even for those involved, so they are forgotten first.
+    const bool bRoutine = E.Type == ELisEvent::Arrived || E.Type == ELisEvent::Met;
+    M.Relevance = BaseRelevance[LisIdx(E.Type)] + (!bRoutine && (bTarget || bActor) ? .5f : 0.f) + (!bRoutine && bWorkplace ? .25f : 0.f);
     if (const FLisRelation* R = (E.Actor > 0 && !bActor) ? Npc.FindRelation(E.Actor) : nullptr)
     {
         M.Relevance += FMath::Abs(R->Affection - .5f) + .5f * R->Resentment;
@@ -1278,7 +1291,8 @@ int32 FLisSimulation::ShareKnowledge(FLisNpc& Speaker, FLisNpc& Listener, int32 
     TArray<const FLisMemory*> Candidates;
     for (const FLisMemory& M : Speaker.Memories)
     {
-        if (Hour - M.Hour <= RetellHours && M.Type != ELisEvent::GoalChanged && !Listener.Knows(M.EventId))
+        const bool bWorthTelling = M.Type != ELisEvent::GoalChanged && M.Type != ELisEvent::Arrived && M.Type != ELisEvent::Met;
+        if (Hour - M.Hour <= RetellHours && bWorthTelling && !Listener.Knows(M.EventId))
         {
             Candidates.Add(&M);
         }
@@ -1325,6 +1339,70 @@ void FLisSimulation::EvaluateGoal(FLisNpc& Npc)
         ++Stats.GoalChanges;
         Emit(ELisEvent::GoalChanged, Npc.Place, Npc.Identity.Id, LisNobody, static_cast<float>(LisIdx(Best)));
     }
+}
+
+bool FLisSimulation::Arrive(int32 Id)
+{
+    FLisNpc* Npc = Find(Id);
+    if (!Npc || Npc->Current != ELisAction::Travel)
+    {
+        return false;
+    }
+    Npc->Current = ELisAction::Idle;
+    Npc->NextThink = Hour;
+    Npc->Place = Npc->IntentPlace;
+    Npc->Tier = TierOf(Npc->Place);
+    // Only the traveller notes its own arrival.
+    const FLisEventRecord E = LogEvent(ELisEvent::Arrived, Npc->Place, Id, LisNobody, 0.f, World.Place(Npc->Place).Cell);
+    Remember(*Npc, E, ELisSource::Observed, LisNobody, 1.f);
+    Observe(*Npc);
+    StartIntent(*Npc);
+    return true;
+}
+
+bool FLisSimulation::TravelFailed(int32 Id)
+{
+    FLisNpc* Npc = Find(Id);
+    if (!Npc || Npc->Current != ELisAction::Travel)
+    {
+        return false;
+    }
+    Npc->Current = ELisAction::Idle;
+    Npc->NextThink = Hour;
+    ++Npc->Replans;
+    ++Stats.Replans;
+    // An unreachable goal is a bad experience: the same plan becomes less attractive.
+    Learn(*Npc, Npc->Intent, -.5f);
+    return true;
+}
+
+bool FLisSimulation::Interrupt(int32 Id, float Outcome)
+{
+    FLisNpc* Npc = Find(Id);
+    if (!Npc || Npc->Current == ELisAction::Idle || Npc->Current == ELisAction::Travel)
+    {
+        return false;
+    }
+    Learn(*Npc, Npc->Current, Outcome);
+    Npc->Current = ELisAction::Idle;
+    Npc->NextThink = Hour;
+    ++Npc->Replans;
+    ++Stats.Replans;
+    return true;
+}
+
+int32 FLisSimulation::Meet(int32 A, int32 B)
+{
+    FLisNpc* First = Find(A);
+    FLisNpc* Second = Find(B);
+    if (!First || !Second || A == B)
+    {
+        return 0;
+    }
+    const FLisEventRecord E = LogEvent(ELisEvent::Met, First->Place, A, B, 0.f, World.Place(First->Place).Cell);
+    Remember(*First, E, ELisSource::Observed, LisNobody, 1.f);
+    Remember(*Second, E, ELisSource::Observed, LisNobody, 1.f);
+    return E.Id;
 }
 
 int32 FLisSimulation::MemoryCount() const

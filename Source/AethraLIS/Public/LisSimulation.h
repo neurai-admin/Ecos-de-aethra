@@ -15,6 +15,8 @@ struct FLisConfig
     float MidRadius = 200.f;
     ELisPlace Focus = ELisPlace::Village;
     float PerceptionRadiusCells = 48.f; // voxel events farther than this from an NPC's place go unseen
+    // When true, travel has no fixed duration: the 3D world walks the NPC and calls Arrive or TravelFailed.
+    bool bExternalTravel = false;
 };
 
 struct FLisStats
@@ -88,7 +90,8 @@ public:
 
     // Persistence: versioned binary format. Load replaces the whole state.
     static constexpr uint32 SaveMagic = 0x3153494C; // "LIS1"
-    static constexpr int32 SaveVersion = 2; // 2: FLisNpc::Forgotten. Version 1 still loads.
+    // 2: FLisNpc::Forgotten. 3: Config.bExternalTravel and the Arrived/Met events. Older versions still load.
+    static constexpr int32 SaveVersion = 3;
     void Serialize(FArchive& Ar);
     TArray<uint8> SaveToBytes() const;
     bool LoadFromBytes(const TArray<uint8>& Bytes);
@@ -101,6 +104,20 @@ public:
 
     // Deterministic [0,1) value from seed, hour, actor and salt. No hidden RNG state to save.
     float Rand(int32 Actor, uint32 Salt) const;
+
+    // --- World integration (LIS 02). All optional: without them the simulation runs abstractly. ---
+    // Who can perceive a voxel change at Cell. Replaces the place-anchor rule of EmitAtCell when set.
+    TFunction<bool(const FLisNpc&, const FIntVector&)> Perceives;
+    // Called with every option scored when an NPC decides (debug overlay: "why this action").
+    TFunction<void(const FLisNpc&, const TArray<FLisOption>&)> OnDecision;
+    // External travel: the NPC reached IntentPlace. Observes it and starts (or replans) the intent.
+    bool Arrive(int32 Id);
+    // External travel: no path. The NPC stays at Place, learns the intent went badly and decides again.
+    bool TravelFailed(int32 Id);
+    // The world could not carry out the running action (for example no tree in reach). Same as a failed outcome.
+    bool Interrupt(int32 Id, float Outcome = -.4f);
+    // Two NPCs met in the world: only they remember it.
+    int32 Meet(int32 A, int32 B);
 
 private:
     void TickHour();

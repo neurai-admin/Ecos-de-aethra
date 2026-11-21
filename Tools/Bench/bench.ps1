@@ -1,15 +1,18 @@
 # Repeatable 1080p benchmark: fixed-timestep route (-AethraBench), CSV capture, stats.
 # Usage (from any folder):
 #   powershell -ExecutionPolicy Bypass -File Tools\Bench\bench.ps1 -Name minha-medicao [-Seconds 60] [-Extra '-dpcvars=aethra.Horizon=0']
+#   -NoLIS measures the same route without the LIS villagers.
 #   -Exe <packaged EcosDeAethra.exe> runs a packaged build instead of the editor in -game mode.
 # Run once with -Seconds 10 first after shader/material changes: the first run compiles shaders.
 param(
     [Parameter(Mandatory)][string]$Name,
     [ValidateRange(1, 3600)][int]$Seconds = 60,
-    [ValidateSet('', '-dpcvars=aethra.Horizon=0', '-dpcvars=aethra.Horizon=1')][string]$Extra = '',
+    [ValidateSet('', '-dpcvars=aethra.Horizon=0', '-dpcvars=aethra.Horizon=1', '-dpcvars=aethra.lis.Debug=0')][string]$Extra = '',
     [string]$Exe = 'D:\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe',
     [string]$Project = '',
-    [switch]$RealTime
+    [switch]$RealTime,
+    # Runs the voxel world without the LIS villagers, to measure the cost of the NPC integration.
+    [switch]$NoLIS
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'bench-output.ps1')
@@ -34,6 +37,7 @@ $arguments += '-windowed', '-ResX=1920', '-ResY=1080', '-ForceRes', '-nosound',
     "-userdir=`"$out`"", "-abslog=`"$out\run.log`"", "-AethraBench=$Seconds", '"-ExecCmds=r.VSync 0, t.MaxFPS 0"'
 if (-not $RealTime) { $arguments += '-benchmark', '-fps=60' }
 if ($Extra) { $arguments += $Extra }
+if ($NoLIS) { $arguments += '-NoLIS' }
 
 $process = Start-Process -FilePath $exeFile.FullName -ArgumentList $arguments -PassThru
 if (-not $process.WaitForExit(($Seconds + 180) * 1000)) {

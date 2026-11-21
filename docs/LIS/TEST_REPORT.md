@@ -69,3 +69,7 @@ Dados em [ELDEN_REPORT.md](ELDEN_REPORT.md). Nenhum resultado foi forçado; as p
 - Utilidade e pesos foram calibrados à mão com um experimento; a vila ainda não foi validada em outras seeds e durações maiores.
 - O comportamento não foi integrado ao jogo nem testado com o mundo voxel real; o adaptador foi testado com eventos simulados.
 - A avaliação de "decisões coerentes" é feita por testes de cenário e pelo relatório, não por métricas estatísticas.
+
+## LIS 02: integração com o mundo (20/11/2026)
+
+Na branch `claude/lis-world-integration-01`, os 31 testes `Aethra.*` passam: os 12 acima, os 12 `Aethra.LISWorld.*` e os 7 `Aethra.Voxel.*` (os 6 do Marco 02 com as correções do Codex, mais `InstigatorCompatibility`). Os testes, os benchmarks com e sem NPCs e as capturas estão em [INTEGRATION_LIS02.md](INTEGRATION_LIS02.md).

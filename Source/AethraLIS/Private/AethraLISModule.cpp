@@ -50,7 +50,8 @@ const TCHAR* LisName(ELisGoal Value)
 const TCHAR* LisName(ELisEvent Value)
 {
     static const TCHAR* Names[] = { TEXT("Escassez de alimentos"), TEXT("Recurso descoberto"), TEXT("Recurso esgotado"), TEXT("Recurso removido"), TEXT("Bloco colocado"),
-        TEXT("Ajuda dada"), TEXT("Ajuda recusada"), TEXT("Negociação bem-sucedida"), TEXT("Negociação falhou"), TEXT("Conflito"), TEXT("Perigo"), TEXT("Perigo repelido"), TEXT("Objetivo mudou") };
+        TEXT("Ajuda dada"), TEXT("Ajuda recusada"), TEXT("Negociação bem-sucedida"), TEXT("Negociação falhou"), TEXT("Conflito"), TEXT("Perigo"), TEXT("Perigo repelido"), TEXT("Objetivo mudou"),
+        TEXT("Chegou ao local"), TEXT("Encontrou alguém") };
     static_assert(UE_ARRAY_COUNT(Names) == LisNum<ELisEvent>());
     return Names[LisIdx(Value)];
 }
