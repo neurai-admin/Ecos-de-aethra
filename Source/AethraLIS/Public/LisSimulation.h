@@ -17,6 +17,9 @@ struct FLisConfig
     float PerceptionRadiusCells = 48.f; // voxel events farther than this from an NPC's place go unseen
     // When true, travel has no fixed duration: the 3D world walks the NPC and calls Arrive or TravelFailed.
     bool bExternalTravel = false;
+    // LIS 03 living village (version 4): builders and merchants get their own work (Build, Tend), and
+    // chopping yields only the wood the 3D world really removed (ReportYield). Off: LIS 01/02 behaviour.
+    bool bLivingVillage = false;
 };
 
 struct FLisStats
@@ -90,8 +93,9 @@ public:
 
     // Persistence: versioned binary format. Load replaces the whole state.
     static constexpr uint32 SaveMagic = 0x3153494C; // "LIS1"
-    // 2: FLisNpc::Forgotten. 3: Config.bExternalTravel and the Arrived/Met events. Older versions still load.
-    static constexpr int32 SaveVersion = 3;
+    // 2: FLisNpc::Forgotten. 3: Config.bExternalTravel and the Arrived/Met events.
+    // 4: Builder, Build/Tend, three events, living-village config, storage, sites and body cells. Older versions still load.
+    static constexpr int32 SaveVersion = 4;
     void Serialize(FArchive& Ar);
     TArray<uint8> SaveToBytes() const;
     bool LoadFromBytes(const TArray<uint8>& Bytes);
@@ -118,6 +122,16 @@ public:
     bool Interrupt(int32 Id, float Outcome = -.4f);
     // Two NPCs met in the world: only they remember it.
     int32 Meet(int32 A, int32 B);
+
+    // --- Living village (LIS 03) ---
+    // The world really gave the NPC this much (wood blocks felled) during its running action.
+    void ReportYield(int32 Id, float Amount);
+    // Something only one NPC noticed (another villager working, a path it found blocked). Returns the event id.
+    int32 Notice(int32 Observer, ELisEvent Type, ELisPlace Place, int32 Actor, float Amount, FIntVector Cell = FIntVector::ZeroValue);
+    // How much a recent "path blocked" memory about Place puts this NPC off going there (0 = not at all).
+    float BlockedPenalty(const FLisNpc& Npc, ELisPlace Place) const;
+    // The NPC remembers recent damage to a village structure (builders inspect it).
+    bool RemembersDamage(const FLisNpc& Npc, int64 WithinHours = 24) const;
 
 private:
     void TickHour();

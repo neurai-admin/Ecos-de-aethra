@@ -10,14 +10,20 @@ AETHRALIS_API DECLARE_LOG_CATEGORY_EXTERN(LogAethraLIS, Log, All);
 enum class ELisTrait : uint8 { Courage, Ambition, Empathy, Curiosity, Aggression, Loyalty, Sociability, Caution, Count };
 enum class ELisNeed : uint8 { Safety, Food, Rest, Work, Social, Purpose, Count };
 enum class ELisPlace : uint8 { Village, Fields, Forest, River, Market, Wilds, Count };
-enum class ELisProfession : uint8 { Farmer, Fisher, Woodcutter, Merchant, Guard, Explorer, Count };
-enum class ELisAction : uint8 { Idle, Eat, Sleep, Farm, Fish, Chop, Sell, BuyFood, AskHelp, GiveHelp, Socialize, Explore, Patrol, Travel, Count };
+enum class ELisProfession : uint8 { Farmer, Fisher, Woodcutter, Merchant, Guard, Explorer, Builder, Count };
+enum class ELisAction : uint8
+{
+    Idle, Eat, Sleep, Farm, Fish, Chop, Sell, BuyFood, AskHelp, GiveHelp, Socialize, Explore, Patrol, Travel,
+    Build, Tend, // LIS 03 (save version 4): builders prepare materials, merchants keep the stall
+    Count
+};
 enum class ELisGoal : uint8 { Survive, MasterCraft, Prosper, SupportCommunity, Discover, Count };
 enum class ELisEvent : uint8
 {
     FoodShortage, ResourceFound, ResourceDepleted, ResourceRemoved, BlockPlaced,
     HelpGiven, HelpRefused, TradeSucceeded, TradeFailed, Conflict, Danger, DangerRepelled, GoalChanged,
     Arrived, Met, // LIS 02: reported by the 3D world (save version 3)
+    PathBlocked, SawWork, StructureDamaged, // LIS 03 (save version 4)
     Count
 };
 enum class ELisSource : uint8 { Observed, Told };
@@ -131,6 +137,11 @@ struct FLisNpc
     float Expectation[LisNum<ELisAction>()] = {};     // learned outcome bias, -1..1
     FLisPlaceBelief Beliefs[LisNum<ELisPlace>()];     // Village stock = community granary
     float BelievedFoodPrice = 2.f;
+    float BelievedWoodStore = 0.f; // village storage, as last seen (version 4)
+    // Wood the 3D world really gave this NPC during the running action (living village, version 4).
+    float WorldYield = 0.f;
+    // Where the body stood when the game saved; Z < 0 = unknown (version 4).
+    FIntVector WorldCell = FIntVector(0, 0, -1);
     TArray<FLisMemory> Memories;
     TArray<FLisForgotten> Forgotten;
     TMap<int32, FLisRelation> Relations;
@@ -172,9 +183,22 @@ struct FLisPlaceState
     FIntVector Cell = FIntVector::ZeroValue; // voxel cell the place is anchored to
 };
 
+// A point of interest the 3D world built for the village (house, workshop...). Kind is defined by the
+// world integration; the LIS only stores it so the layout survives a restart (version 4).
+struct FLisSite
+{
+    uint8 Kind = 0;
+    uint8 Facing = 0;    // 0..3: +X, +Y, -X, -Y
+    int32 Owner = 0;     // e.g. first resident of a house
+    FIntVector Cell = FIntVector::ZeroValue;
+};
+
 struct FLisWorld
 {
     FLisPlaceState Places[LisNum<ELisPlace>()];
+    TArray<FLisSite> Sites;   // version 4
+    float WoodStore = 0.f;    // village storage: wood sold by woodcutters, used by builders (version 4)
+    float Prepared = 0.f;     // material prepared by builders; no use in the world yet (version 4)
     float Granary = 40.f;     // community food store in the village
     float FoodPrice = 2.f;
     float WoodPrice = 1.5f;

@@ -27,7 +27,7 @@ const TCHAR* LisName(ELisPlace Value)
 
 const TCHAR* LisName(ELisProfession Value)
 {
-    static const TCHAR* Names[] = { TEXT("Agricultor"), TEXT("Pescador"), TEXT("Lenhador"), TEXT("Comerciante"), TEXT("Guarda"), TEXT("Explorador") };
+    static const TCHAR* Names[] = { TEXT("Agricultor"), TEXT("Pescador"), TEXT("Lenhador"), TEXT("Comerciante"), TEXT("Guarda"), TEXT("Explorador"), TEXT("Construtor") };
     static_assert(UE_ARRAY_COUNT(Names) == LisNum<ELisProfession>());
     return Names[LisIdx(Value)];
 }
@@ -35,7 +35,7 @@ const TCHAR* LisName(ELisProfession Value)
 const TCHAR* LisName(ELisAction Value)
 {
     static const TCHAR* Names[] = { TEXT("Ocioso"), TEXT("Comer"), TEXT("Dormir"), TEXT("Plantar/colher"), TEXT("Pescar"), TEXT("Cortar lenha"), TEXT("Vender"), TEXT("Comprar comida"),
-        TEXT("Pedir ajuda"), TEXT("Ajudar"), TEXT("Conviver"), TEXT("Explorar"), TEXT("Patrulhar"), TEXT("Viajar") };
+        TEXT("Pedir ajuda"), TEXT("Ajudar"), TEXT("Conviver"), TEXT("Explorar"), TEXT("Patrulhar"), TEXT("Viajar"), TEXT("Construir"), TEXT("Atender no mercado") };
     static_assert(UE_ARRAY_COUNT(Names) == LisNum<ELisAction>());
     return Names[LisIdx(Value)];
 }
@@ -51,7 +51,7 @@ const TCHAR* LisName(ELisEvent Value)
 {
     static const TCHAR* Names[] = { TEXT("Escassez de alimentos"), TEXT("Recurso descoberto"), TEXT("Recurso esgotado"), TEXT("Recurso removido"), TEXT("Bloco colocado"),
         TEXT("Ajuda dada"), TEXT("Ajuda recusada"), TEXT("Negociação bem-sucedida"), TEXT("Negociação falhou"), TEXT("Conflito"), TEXT("Perigo"), TEXT("Perigo repelido"), TEXT("Objetivo mudou"),
-        TEXT("Chegou ao local"), TEXT("Encontrou alguém") };
+        TEXT("Chegou ao local"), TEXT("Encontrou alguém"), TEXT("Caminho bloqueado"), TEXT("Viu alguém trabalhando"), TEXT("Estrutura danificada") };
     static_assert(UE_ARRAY_COUNT(Names) == LisNum<ELisEvent>());
     return Names[LisIdx(Value)];
 }
@@ -80,6 +80,8 @@ ELisProfession LisSkillFor(ELisAction Action)
     case ELisAction::BuyFood: return ELisProfession::Merchant;
     case ELisAction::Patrol: return ELisProfession::Guard;
     case ELisAction::Explore: return ELisProfession::Explorer;
+    case ELisAction::Build: return ELisProfession::Builder;
+    case ELisAction::Tend: return ELisProfession::Merchant;
     default: return ELisProfession::Count;
     }
 }
