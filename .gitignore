@@ -18,3 +18,7 @@
 !/Build/*/Resources/
 !/Build/**/*.ico
 !/Build/**/PakBlacklist*.txt
+
+# Packaged build archived by UAT (not source)
+/Windows/
+/Builds/

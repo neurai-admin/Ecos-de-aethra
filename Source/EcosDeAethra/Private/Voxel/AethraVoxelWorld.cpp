@@ -4,6 +4,9 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "HAL/IConsoleManager.h"
+#include "Voxel/AethraHorizon.h"
+#include "Voxel/AethraStats.h"
 #include "Voxel/AethraTerrain.h"
 #include "Voxel/AethraVoxelChunk.h"
 #include "Voxel/AethraWorldSave.h"
@@ -15,6 +18,9 @@ namespace
     constexpr int32 SaveFormat = 1;
     constexpr int32 ChunksPerFrame = 1;
     DEFINE_LOG_CATEGORY_STATIC(LogAethraVoxel, Log, All);
+
+    TAutoConsoleVariable<int32> CVarHorizon(TEXT("aethra.Horizon"), 1,
+        TEXT("Distant LOD horizon beyond the voxel radius (0 = off, 1 = on)."));
 }
 
 AAethraVoxelWorld::AAethraVoxelWorld()
@@ -53,7 +59,7 @@ FVector AAethraVoxelWorld::PrepareSpawn()
 {
     Initialize();
     const FIntPoint Center(0, 0);
-    LoadChunk(Center);
+    LoadChunk(Center, false); // the player spawns on it this frame
     int32 Top = Height - 1;
     while (Top > 0 && GetBlock(FIntVector(0, 0, Top)) == EAethraBlock::Air)
     {
@@ -75,6 +81,19 @@ void AAethraVoxelWorld::Tick(float DeltaSeconds)
     }
 
     const FIntPoint Center = ChunkAt(CellAt(Pawn->GetActorLocation()));
+    const bool bHorizon = CVarHorizon.GetValueOnGameThread() != 0;
+    if (bHorizon && !Horizon)
+    {
+        Horizon = GetWorld()->SpawnActor<AAethraHorizon>();
+    }
+    if (Horizon)
+    {
+        Horizon->SetActorHiddenInGame(!bHorizon);
+        if (bHorizon)
+        {
+            Horizon->Update(Seed, Center, StreamingRadius);
+        }
+    }
     for (auto It = Loaded.CreateIterator(); It; ++It)
     {
         const FIntPoint Offset = It.Key() - Center;
@@ -100,7 +119,7 @@ void AAethraVoxelWorld::Tick(float DeltaSeconds)
     }
 }
 
-void AAethraVoxelWorld::LoadChunk(FIntPoint Coordinate)
+void AAethraVoxelWorld::LoadChunk(FIntPoint Coordinate, bool bAsyncCollision)
 {
     if (Loaded.Contains(Coordinate))
     {
@@ -111,7 +130,7 @@ void AAethraVoxelWorld::LoadChunk(FIntPoint Coordinate)
         FVector(ChunkOrigin(Coordinate)) * CellSizeCm, FRotator::ZeroRotator);
     if (Chunk)
     {
-        Chunk->Initialize(*this, Coordinate);
+        Chunk->Initialize(*this, Coordinate, bAsyncCollision);
         Loaded.Add(Coordinate, Chunk);
     }
 }
@@ -259,6 +278,7 @@ FString AAethraVoxelWorld::SaveSlot(int32 Slot) const
 
 bool AAethraVoxelWorld::SaveEdits()
 {
+    CSV_SCOPED_TIMING_STAT(Aethra, SaveEdits);
     if (Revision == MAX_int64)
     {
         return false;
@@ -343,6 +363,15 @@ void AAethraVoxelWorld::LoadEdits()
         }
     }
 
+    if (Revision > 0)
+    {
+        int32 Count = 0;
+        for (const auto& Chunk : ChunkEdits)
+        {
+            Count += Chunk.Value.Num();
+        }
+        UE_LOG(LogAethraVoxel, Display, TEXT("Loaded %d voxel edits (revision %lld) for seed %d."), Count, Revision, Seed);
+    }
     if (bSlotExists && Revision == 0)
     {
         bSaveWritable = false;

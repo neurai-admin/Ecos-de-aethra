@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "AethraVoxelWorld.generated.h"
 
+class AAethraHorizon;
 class AAethraVoxelChunk;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAethraOnBlockChanged, const FAethraBlockChange&, Change);
@@ -43,6 +44,9 @@ private:
     UPROPERTY(Transient)
     TMap<FIntPoint, TObjectPtr<AAethraVoxelChunk>> Loaded;
 
+    UPROPERTY(Transient)
+    TObjectPtr<AAethraHorizon> Horizon;
+
     int64 Revision = 0;
     int32 StreamingRadius = 3;
     bool bInitialized = false;
@@ -55,5 +59,5 @@ private:
     void LoadEdits();
     void ApplyChunkEdits(FIntPoint Chunk, TArray<EAethraBlock>& Blocks) const;
     void ApplyColumnEdits(FIntPoint Point, TArrayView<EAethraBlock> Column) const;
-    void LoadChunk(FIntPoint Chunk);
+    void LoadChunk(FIntPoint Chunk, bool bAsyncCollision = true);
 };

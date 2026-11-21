@@ -12,7 +12,16 @@ enum class EAethraBlock : uint8
     Stone,
     Sand,
     Wood,
-    Leaves
+    Leaves,
+    // Appended only: saved edits store these numeric values.
+    PineLeaves,
+    TallGrass,
+    FlowerRed,
+    FlowerYellow,
+    Snow,
+    Water,
+    BirchWood,
+    BirchLeaves
 };
 
 USTRUCT(BlueprintType)
