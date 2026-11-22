@@ -78,6 +78,20 @@ local antes do entalhe. Agora o rio corre dentro do próprio leito. Os testes de
   - `-AethraNoMenu` pula o menu. O benchmark e as capturas automáticas também pulam.
 - **Interface:** fontes entalhadas próprias, cinto com cantos cortados e moldura dourada, menu em painéis entalhados. Nada da interface vem do Minecraft.
 
+## Arte própria (nada do Minecraft)
+
+- **Materiais pintados:** as texturas não têm mais grade de 16×16 pontos. Todo padrão é ruído contínuo nas coordenadas do mundo: pinceladas largas mais grão fino. Tijolos, tábuas e telhas têm juntas suaves.
+- **Lateral da grama:** no lugar da franja em pixel, um lábio de musgo suave e ondulado sobre o solo.
+- **Plantas:** nada de planos em X.
+  - A grama e a samambaia são tufos de lâminas afiladas, inclinadas em direções aleatórias.
+  - As flores têm haste, folhas e uma corola de pétalas inclinada.
+  - O girassol tem uma corola grande; a lavanda, hastes com espigas.
+- **Folhagem:** os blocos de folha continuam no mundo, mas só como colisão invisível; cavar e subir funcionam como antes.
+  - O que se vê são maços de folhagem: três cartões lobados por bloco exposto, em ângulos aleatórios e maiores que o bloco, então a copa fica redonda.
+  - As copas do mundo em blocos são domos e discos, não caixas.
+  - No horizonte, as copas só tingem o chão de verde-escuro, sem caixas flutuando.
+- O mundo clássico usa os mesmos materiais, plantas e folhagem, mas o horizonte e as árvores dele não mudaram (os saves continuam idênticos).
+
 ## Blocos novos
 
 Os ids são anexados depois de `BirchLeaves`, porque saves guardam os valores numéricos. Eles param em 31,

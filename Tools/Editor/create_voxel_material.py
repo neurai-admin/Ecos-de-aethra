@@ -5,7 +5,8 @@ Run headless:
 
 Vertex colour contract (AethraBlockColor.h / AethraVoxelChunk.cpp):
   RGB = block tint x baked ambient occlusion, A = block id / 31 (EAethraBlock value).
-  Plants override A: 1 = tall grass, 0.5 = flower; their UV V = 0 at the ground.
+  Plants are small meshes (blades, stems, corollas): UV.x = 0 on blades (UV.y = height), 1 + radius on corollas.
+  Leaf cards: UV 0..1 per card, A = the card's seed.
   (An earlier inverted-V note came from a broken mask helper: new ComponentMasks start with R+G on.)
 
 M_AethraVoxel  opaque blocks and the horizon: per-block 16x16 procedural pattern (grass fringe over
@@ -27,12 +28,12 @@ def srgb_to_linear(c):
     return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
 
-# Grass sides carry the side tint; below the fringe the material turns it into dirt (same AO).
+# Grass sides carry the side tint; below a soft, wavy moss lip the material paints them as soil.
 GRASS_SIDE, DIRT = (98, 140, 54), (113, 78, 50)
 DIRT_RATIO = "float3(%s)" % ", ".join("%.4f" % (srgb_to_linear(d) / srgb_to_linear(g)) for g, d in zip(GRASS_SIDE, DIRT))
 
-# Shared helpers: integer hash per texel and smooth value noise. A local struct is the usual way to
-# define functions inside a Custom node.
+# Shared helpers: hash and smooth value noise. A local struct is the usual way to define functions inside
+# a Custom node. Everything here is continuous (no texel grid): ECOS DE AETHRA paints its blocks.
 HELPERS = r"""
 struct FAethra
 {
@@ -54,18 +55,17 @@ struct FAethra
 };
 FAethra fn;
 float3 inside = P - N * 0.5;                    // inside the block, off the face plane
-int3 cell = (int3)floor(inside / 100.0);
 float3 f = frac(inside / 100.0);
 float3 an = abs(N);
 bool top = N.z > 0.5;
 bool bottom = N.z < -0.5;
 float2 uv = an.z > 0.5 ? f.xy : (an.x > 0.5 ? f.yz : f.xz); // on sides uv.y is the height
-int2 t = (int2)floor(uv * 16.0);
 int face = an.z > 0.5 ? (top ? 0 : 1) : (an.x > 0.5 ? 2 : 3);
-// World-aligned texels: the grain runs across block borders, so the ground reads as one surface.
+// World-aligned coordinates (cm): every pattern runs across block borders.
 float2 w = an.z > 0.5 ? inside.xy : (an.x > 0.5 ? inside.yz : inside.xz);
-int2 tw = (int2)floor(w * 0.16);
-float g = fn.H(int3(tw, face));                   // texel grain 0..1
+float n1 = fn.V(w / 38.0 + face * 17.0, 1);       // broad brush strokes
+float n2 = fn.V(w / 9.0 + face * 5.0, 2);         // fine grain
+float g = 0.55 * n1 + 0.45 * n2;
 float hue = fn.V(P.xy / 2200.0, 11);              // ~20 m patches of warmer / cooler vegetation
 float3 drift = lerp(float3(0.90, 1.0, 0.82), float3(1.12, 1.02, 0.86), hue);
 """
@@ -75,59 +75,87 @@ int id = (int)round(Id * 31.0);
 float3 col = C;
 float rough = 0.86;
 float k = 1.0;
-if (id == 1 && !top && !bottom)                   // grass side: ragged green fringe over dirt
+if (id == 1 && !top && !bottom)                   // grass side: a soft wavy moss lip over soil
 {
-    int fringe = 2 + (int)(fn.H(int3(t.x, 7, face) + cell * 37) * 3.0);
-    if (15 - t.y >= fringe) { col *= DIRT_RATIO; id = 2; }
+    float lip = 0.80 + 0.10 * fn.V(float2((w.x + w.y) / 22.0, 3.0), 7);
+    float moss = smoothstep(lip - 0.05, lip + 0.05, f.z);
+    col = lerp(col * DIRT_RATIO, col, moss);
+    if (moss < 0.5) id = 2;
 }
-if (id == 1)      { k = 0.82 + 0.30 * g; if (top && g > 0.93) k *= 1.15; col *= drift; }
-else if (id == 2) { float clump = fn.H(int3(tw / 2, face + 4)); k = 0.78 + 0.22 * clump + 0.12 * g; if (g > 0.95) k = 1.25; }
-else if (id == 3 || (id >= 17 && id <= 21))      // stone and the WorldGen rocks: flat slabs, lighter patches, dark seams
+if (id == 1)      { k = 0.84 + 0.26 * g; col *= drift; }
+else if (id == 2) { k = 0.80 + 0.28 * g; }
+else if (id == 3 || (id >= 17 && id <= 21))      // stone and the WorldGen rocks: layered slabs with soft seams
 {
-    float v = fn.V(w / 25.0 + face * 13.0, 3);
-    k = 0.86 + 0.12 * g;
-    if (v > 0.62) k += 0.16;
-    if (abs(v - 0.62) < 0.035) k -= 0.28;
+    float v = fn.V(w / 28.0 + face * 13.0, 3);
+    k = 0.86 + 0.12 * n2 + (v > 0.6 ? 0.12 : 0.0);
+    k -= 0.25 * (1.0 - smoothstep(0.0, 0.035, abs(v - 0.6)));
     rough = 0.74;
 }
-else if (id == 4) { k = 0.93 + 0.10 * g; if (top) k *= 0.97 + 0.04 * sin(w.y * 0.25 + w.x * 0.06); rough = 0.92; }
+else if (id == 4) { k = 0.94 + 0.08 * n2; if (top) k *= 0.97 + 0.04 * sin(w.y * 0.25 + w.x * 0.06); rough = 0.92; }
 else if (id == 5 || id == 13)                     // oak / birch: rings on cut faces, bark on sides
 {
     if (top || bottom)
     {
-        float r = length(uv - 0.5) * 16.0;
-        k = (frac(r / 2.2) < 0.35 ? 0.82 : 1.0) * (0.95 + 0.08 * g);
-        if (r > 7.0) k *= 0.7;
+        float r = length(uv - 0.5);
+        k = (0.84 + 0.16 * smoothstep(0.25, 0.55, frac(r * 7.0))) * (r > 0.44 ? 0.72 : 1.0);
     }
-    else if (id == 5) { float streak = fn.H(int3(t.x, t.y / 4, face) + cell * 37); k = (0.72 + 0.32 * streak) * (0.88 + 0.12 * g); }
-    else { k = 0.96 + 0.05 * g; float dash = fn.H(int3(t.x / 3, t.y, face) + cell * 37); if (dash > 0.84 && t.y % 3 == 0) k = 0.32; }
+    else if (id == 5) { k = 0.70 + 0.36 * fn.V(float2(w.x / 6.0, w.y / 45.0), 4) + 0.06 * n2; }
+    else { k = 0.97 - 0.62 * smoothstep(0.74, 0.8, fn.V(float2(w.x / 7.0, w.y / 4.0), 4)); }
 }
-else if (id == 6 || id == 7 || id == 14) { k = 0.70 + 0.45 * g; col *= drift; } // leaves seen on the horizon
+else if (id == 6 || id == 7 || id == 14) { k = 0.72 + 0.4 * g; col *= drift; } // leaves seen on the horizon
 else if (id == 11) { k = 0.95 + 0.05 * g; rough = 0.55; }
 else if (id == 12) { k = 0.95 + 0.06 * g; rough = 0.08; }
-else if (id == 15) { float peb = fn.H(int3(tw / 3, face + 4)); k = 0.70 + 0.45 * peb + 0.08 * g; if ((t.x + t.y) % 3 == 0 && g > 0.7) k *= 0.6; } // gravel: pebbles
-else if (id == 16) { k = 0.85 + 0.18 * fn.V(w / 33.0, 5) + 0.06 * g; rough = 0.6; }   // mud: wet, smooth
-else if (id == 22) { float v = fn.V(w / 33.0 + face * 7.0, 9); k = 0.97 + 0.04 * g; if (abs(v - 0.5) < 0.03) k = 0.70; rough = 0.45; } // marble: veins
-else if (id == 23)                                // stone bricks: 2 courses, offset joints
+else if (id == 15) { float peb = fn.V(w / 7.0 + face * 3.0, 6); k = 0.62 + 0.5 * smoothstep(0.25, 0.45, peb) * (0.8 + 0.4 * n1); } // gravel: rounded pebbles
+else if (id == 16) { k = 0.85 + 0.18 * fn.V(w / 33.0, 5) + 0.05 * n2; rough = 0.55; }  // mud: wet, smooth
+else if (id == 22) { float v = fn.V(w / 33.0 + face * 7.0, 9); k = 0.97 + 0.03 * n2 - 0.27 * (1.0 - smoothstep(0.0, 0.03, abs(v - 0.5))); rough = 0.45; } // marble: veins
+else if (id == 23)                                // stone bricks: two courses, offset joints, worn edges
 {
-    int row = t.y / 8; int jx = (t.x + (row % 2) * 4) % 8;
-    k = (t.y % 8 == 0 || jx == 0) ? 0.62 : 0.88 + 0.14 * fn.H(int3((t.x + (row % 2) * 4) / 8, row, face) + cell * 37) + 0.06 * g;
+    float row = floor(uv.y * 2.0);
+    float jx = frac(uv.x * 2.0 + row * 0.5);
+    float mortar = 1.0 - smoothstep(0.03, 0.07, min(min(frac(uv.y * 2.0), 1.0 - frac(uv.y * 2.0)), min(jx, 1.0 - jx)));
+    k = lerp(0.86 + 0.14 * n1, 0.6, mortar);
     rough = 0.8;
 }
-else if (id == 24) { k = (t.y % 4 == 0 ? 0.68 : 0.92 + 0.10 * g) * (0.9 + 0.15 * fn.H(int3(0, t.y / 4, face) + cell * 37)); } // planks
-else if (id == 25) { k = (t.y % 4 == 3 ? 0.66 : 0.95 + 0.06 * g) * ((t.x + (t.y / 4) * 2) % 4 == 0 ? 0.85 : 1.0); rough = 0.7; } // roof tiles
-else if (id == 26) { float facet = fn.H(int3(t / 4, face) + cell * 37); k = 0.85 + 0.55 * facet; rough = 0.15; } // Aetherite crystal
-else if (id == 31) { k = 0.94 + 0.06 * g; if (t.y % 8 == 4) k = 0.78; rough = 0.5; } // ceramic
-k = lerp(k, 1.0, saturate((D - 3000.0) / 9000.0)); // no edge bevel: blocks join into one continuous surface
+else if (id == 24) { float board = frac(uv.y * 4.0); k = (0.86 + 0.16 * fn.V(float2(w.x / 30.0, floor(uv.y * 4.0) * 9.0 + w.y / 200.0), 8)) * lerp(0.7, 1.0, smoothstep(0.0, 0.08, min(board, 1.0 - board))); } // planks
+else if (id == 25) { k = (0.97 - 0.3 * smoothstep(0.65, 1.0, frac(uv.y * 4.0))) * (0.92 + 0.08 * n1); rough = 0.7; } // roof tiles: overlapping rows
+else if (id == 26) { float facet = fn.V(w / 14.0 + face * 9.0, 10); k = 0.85 + 0.55 * smoothstep(0.45, 0.55, facet); rough = 0.15; } // Aetherite crystal
+else if (id == 31) { k = (0.94 + 0.06 * n1) * (1.0 - 0.18 * (1.0 - smoothstep(0.0, 0.04, abs(frac(uv.y * 2.0) - 0.5)))); rough = 0.5; } // ceramic
+k = lerp(k, 1.0, saturate((D - 3000.0) / 9000.0));
 return float4(col * k, rough);
 """.replace("DIRT_RATIO", DIRT_RATIO)
 
-LEAVES_CODE = HELPERS + r"""
-float cluster = fn.H(int3(t / 2, face) + cell * 37);
-float gap = fn.H(int3(t / 4, face + 8) + cell * 37);    // few, larger gaps between leaf clusters
-float opacity = (gap < 0.22 && g < 0.6) || (cluster < 0.08) ? 0.0 : 1.0;
-opacity = max(opacity, saturate((D - 3500.0) / 2500.0)); // solid far away: no shimmering holes
-float k = 0.70 + 0.25 * g + 0.25 * cluster;          // light and dark leaf groups, not per-texel noise
+# Foliage clusters: each card (UV 0..1, its seed in vertex alpha S) is a lobed clump of leaves with
+# a few gaps; light inside, darker at the rim.
+LEAVES_CODE = r"""
+struct FAethra
+{
+    float H(int3 p)
+    {
+        uint h = (uint)p.x * 73856093u ^ (uint)p.y * 19349663u ^ (uint)p.z * 83492791u;
+        h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
+        return (h & 1023u) / 1023.0;
+    }
+    float V(float2 p, int salt)
+    {
+        int2 i = (int2)floor(p);
+        float2 f = frac(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = H(int3(i, salt)), b = H(int3(i + int2(1, 0), salt));
+        float c = H(int3(i + int2(0, 1), salt)), d = H(int3(i + int2(1, 1), salt));
+        return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+    }
+};
+FAethra fn;
+float2 q = UV - 0.5;
+float r = length(q) * 2.0;
+float ang = atan2(q.y, q.x);
+float lobes = 0.8 + 0.12 * sin(ang * 5.0 + S * 40.0) + 0.07 * sin(ang * 11.0 + S * 17.0);
+float leaf = fn.V(UV * 9.0 + S * 31.0, 4);
+float far = saturate((D - 3500.0) / 2500.0);       // far away: no small gaps (no shimmer)
+float opacity = (r < lobes && (leaf > 0.24 || far > 0.5)) ? 1.0 : 0.0;
+float hue = fn.V(P.xy / 2200.0, 11);
+float3 drift = lerp(float3(0.90, 1.0, 0.82), float3(1.12, 1.02, 0.86), hue);
+float k = (0.72 + 0.4 * fn.V(UV * 4.0 + S * 13.0, 6)) * (1.05 - 0.3 * r);
 return float4(C * k * drift, opacity);
 """
 
@@ -138,25 +166,14 @@ return float3(s * 2.2, s * 1.6, 0.0) * Amount;
 """
 
 PLANT_CODE = r"""
-int2 t = (int2)floor(saturate(UV) * 15.999); // the chunk sets V = 0 at the ground: t.y = height
-int2 cell = (int2)floor(P.xy / 100.0);          // constant per plant: quads stay inside one cell
-uint col = (uint)t.x * 2654435761u ^ (uint)cell.x * 73856093u ^ (uint)cell.y * 19349663u;
-col ^= col >> 15; col *= 0x2c1b3c6du; col ^= col >> 12;
-float3 green = float3(0.13, 0.30, 0.07);
-if (Kind > 0.75)                               // tall grass: uneven blades, dark roots, bright tips
+// Blades and stems (UV.x = 0): dark at the root, bright at the tip. Corollas (UV.x = 1 + radius):
+// a darker heart, the petal colour outward. Colour comes from the vertex (stems green, petals tinted).
+if (UV.x > 0.5)
 {
-    float blade = 6.0 + (col % 9u);
-    // Thin separate blades: every other texel column, about a quarter skipped.
-    bool on = t.x % 2 == 0 && (col >> 8) % 4u != 0u && t.y < blade;
-    float tip = t.y / max(blade - 1.0, 1.0);
-    return float4(lerp(Tint.rgb * 0.5, Tint.rgb * 1.0 + float3(0.015, 0.01, 0.0), tip), on ? 1.0 : 0.0);
+    float r = UV.x - 1.0;
+    return float4(lerp(Tint.rgb * 0.35 + float3(0.06, 0.04, 0.0), Tint.rgb * 1.05, smoothstep(0.2, 0.5, r)), 1.0);
 }
-bool stem = (t.x == 7 || t.x == 8) && t.y < 10;
-float2 c = float2(t) - float2(7.5, 11.0);
-bool petal = abs(c.x) + abs(c.y) <= 3.0 && t.y >= 8;
-bool core = abs(c.x) <= 0.5 && abs(c.y) <= 0.5;
-float3 rgb = core ? float3(0.85, 0.65, 0.12) : petal ? Tint.rgb : green;
-return float4(rgb, stem || petal ? 1.0 : 0.0);
+return float4(lerp(Tint.rgb * 0.45, Tint.rgb * 1.08, saturate(UV.y)), 1.0);
 """
 
 WATER_NORMAL_CODE = r"""
@@ -269,7 +286,9 @@ vc = node(m, unreal.MaterialExpressionVertexColor)
 wp = node(m, unreal.MaterialExpressionWorldPosition)
 n = node(m, unreal.MaterialExpressionVertexNormalWS)
 d = node(m, unreal.MaterialExpressionPixelDepth)
-out = custom(m, LEAVES_CODE, F4, "AethraLeaves", [("P", wp, ""), ("N", n, ""), ("D", d, ""), ("C", vc, "")])
+m.set_editor_property("two_sided", True)
+uvl = node(m, unreal.MaterialExpressionTextureCoordinate)
+out = custom(m, LEAVES_CODE, F4, "AethraLeaves", [("P", wp, ""), ("D", d, ""), ("C", vc, ""), ("S", vc, "A"), ("UV", uvl, "")])
 rgb = mask(m, out, "rgb")
 mel.connect_material_property(rgb, "", MP.MP_BASE_COLOR)
 mel.connect_material_property(mask(m, out, "a"), "", MP.MP_OPACITY_MASK)
@@ -288,13 +307,12 @@ m.set_editor_property("two_sided", True)
 vc = node(m, unreal.MaterialExpressionVertexColor)
 uv = node(m, unreal.MaterialExpressionTextureCoordinate)
 wp = node(m, unreal.MaterialExpressionWorldPosition)
-out = custom(m, PLANT_CODE, F4, "AethraPlantPattern",
-             [("UV", uv, ""), ("Tint", vc, ""), ("Kind", vc, "A"), ("P", wp, "")])
+out = custom(m, PLANT_CODE, F4, "AethraPlantPattern", [("UV", uv, ""), ("Tint", vc, "")])
 mel.connect_material_property(mask(m, out, "rgb"), "", MP.MP_BASE_COLOR)
 mel.connect_material_property(mask(m, out, "a"), "", MP.MP_OPACITY_MASK)
 mel.connect_material_property(constant(m, 0.9), "", MP.MP_ROUGHNESS)
 time = node(m, unreal.MaterialExpressionTime)
-tip_wind = WIND_CODE.replace("* Amount;", "* UV.y * 2.0;")  # roots stay, tips sway
+tip_wind = WIND_CODE.replace("* Amount;", "* UV.y * 2.5;")  # roots stay, tips and corollas sway
 mel.connect_material_property(custom(m, tip_wind, F3, "AethraPlantWind", [("P", wp, ""), ("T", time, ""), ("UV", uv, "")]),
                               "", MP.MP_WORLD_POSITION_OFFSET)
 save(full, m)

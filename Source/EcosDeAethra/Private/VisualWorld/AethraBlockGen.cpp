@@ -85,6 +85,7 @@ EB BlockTree(const FFloraTree& T, int32 DX, int32 DY, int32 DZ)
     const uint32 H = static_cast<uint32>(T.Id ^ (T.Id >> 32));
     const int32 Extra = FMath::Clamp(FMath::RoundToInt((T.Scale - 1.f) * 4.f), -1, 2) + T.Variant % 2;
     const int32 AX = FMath::Abs(DX), AY = FMath::Abs(DY), Cheb = FMath::Max(AX, AY);
+    const int32 D2 = DX * DX + DY * DY; // crowns are round (discs and domes), not boxes
     switch (T.Species)
     {
     case EFloraSpecies::Oak:
@@ -94,13 +95,9 @@ EB BlockTree(const FFloraTree& T, int32 DX, int32 DY, int32 DZ)
         {
             return EB::Wood;
         }
-        const int32 L = DZ - Trunk + 1; // crown layers 0..3
-        const int32 Radius[] = { 2, 2, 2, 1 };
-        if (L >= 0 && L < 4 && Cheb <= Radius[L] && !(AX == 2 && AY == 2 && ((H >> (L + DX * 3 + DY)) & 1)))
-        {
-            return EB::Leaves;
-        }
-        return EB::Air;
+        const int32 L = DZ - Trunk + 1; // crown layers 0..3: a dome
+        const int32 Radius2[] = { 5, 8, 5, 2 };
+        return L >= 0 && L < 4 && D2 <= Radius2[L] ? EB::Leaves : EB::Air;
     }
     case EFloraSpecies::Birch:
     {
@@ -110,8 +107,8 @@ EB BlockTree(const FFloraTree& T, int32 DX, int32 DY, int32 DZ)
             return EB::BirchWood;
         }
         const int32 L = DZ - Trunk + 2;
-        const int32 Radius[] = { 1, 1, 1, 0 };
-        return L >= 0 && L < 4 && Cheb <= Radius[L] && !(AX == 1 && AY == 1 && L == 2) ? EB::BirchLeaves : EB::Air;
+        const int32 Radius2[] = { 2, 2, 1, 0 };
+        return L >= 0 && L < 4 && D2 <= Radius2[L] ? EB::BirchLeaves : EB::Air;
     }
     case EFloraSpecies::Pine:
     {
@@ -125,7 +122,7 @@ EB BlockTree(const FFloraTree& T, int32 DX, int32 DY, int32 DZ)
         return L >= 0 && L < 7 && AX + AY <= Crown[L] && DZ <= Trunk + 2 ? EB::PineLeaves : EB::Air;
     }
     case EFloraSpecies::Bush:
-        return (DZ == 1 && Cheb <= 1 && !(AX == 1 && AY == 1 && (H & 1))) || (DZ == 2 && Cheb == 0) ? EB::Leaves : EB::Air;
+        return (DZ == 1 && D2 <= 1) || (DZ == 2 && Cheb == 0) ? EB::Leaves : EB::Air;
     case EFloraSpecies::Willow:
     {
         const int32 Trunk = 4 + Extra;
@@ -133,12 +130,12 @@ EB BlockTree(const FFloraTree& T, int32 DX, int32 DY, int32 DZ)
         {
             return EB::Wood;
         }
-        if ((DZ == Trunk + 1 && Cheb <= 3) || (DZ == Trunk + 2 && Cheb <= 2))
+        if ((DZ == Trunk + 1 && D2 <= 10) || (DZ == Trunk + 2 && D2 <= 5))
         {
             return EB::BirchLeaves;
         }
         // Hanging curtains along the canopy edge.
-        return Cheb == 3 && DZ >= Trunk - 2 && DZ <= Trunk && (BlockHash(DX, DY, static_cast<int32>(H), 7u) & 3) != 0 ? EB::BirchLeaves : EB::Air;
+        return D2 >= 7 && D2 <= 10 && DZ >= Trunk - 2 && DZ <= Trunk && (BlockHash(DX, DY, static_cast<int32>(H), 7u) & 3) != 0 ? EB::BirchLeaves : EB::Air;
     }
     case EFloraSpecies::Palm:
     {

@@ -64,6 +64,7 @@ AAethraVoxelChunk::AAethraVoxelChunk()
     static ConstructorHelpers::FObjectFinderOptional<UMaterialInterface> Water(
         TEXT("/Game/Materials/M_AethraWater.M_AethraWater"));
     Mesh->SetMaterial(2, Leaves.Get() ? Leaves.Get() : Voxel.Get());
+    Mesh->SetMaterial(4, Leaves.Get() ? Leaves.Get() : Voxel.Get()); // foliage clusters
     Mesh->SetMaterial(3, Water.Get() ? Water.Get() : Voxel.Get());
 }
 
@@ -168,32 +169,131 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
     TArray<int32> PlantTriangles;
     TArray<FVector2D> PlantUV;
     TArray<FLinearColor> PlantColors;
-    // Two diagonal quads; the plant material is two-sided. Vertex alpha tells grass (1) from flowers (0.5).
     const bool bSmoothWater = FAethraBlockGen::IsAethraSeed(World.Seed);
+    // Plants are small meshes of their own, not crossed quads: grass and ferns are tufts of tapered
+    // blades leaning in random directions; flowers a stem with leaves and a tilted corolla.
+    // UV: X = 0 on blades and stems (Y = height 0..1), X = 1 + radius on corollas (Y = 1, they sway with
+    // the stem tip). Vertex colour carries the part's colour.
+    const auto Rand = [](uint32& State) { State = State * 1664525u + 1013904223u; return (State >> 8) / 16777216.0f; };
+    const auto AddBlade = [&](const FVector& Base, float Yaw, float BladeHeight, float Width, float Lean, const FLinearColor& Color)
+    {
+        const FVector Side(FMath::Cos(Yaw), FMath::Sin(Yaw), 0.0);
+        const FVector Bend = FVector(-Side.Y, Side.X, 0.0) * Lean;
+        const FVector Mid = Base + FVector(0, 0, BladeHeight * 0.55) + Bend * 0.35;
+        const FVector Tip = Base + FVector(0, 0, BladeHeight) + Bend;
+        const int32 Start = PlantVertices.Num();
+        PlantVertices.Append({ Base - Side * Width, Base + Side * Width, Mid + Side * Width * 0.6, Mid - Side * Width * 0.6, Tip });
+        PlantUV.Append({ {0, 0}, {0, 0}, {0, 0.55}, {0, 0.55}, {0, 1} });
+        PlantTriangles.Append({ Start, Start + 2, Start + 1, Start, Start + 3, Start + 2, Start + 3, Start + 4, Start + 2 });
+        for (int32 V = 0; V < 5; ++V)
+        {
+            PlantNormals.Add(FVector::UpVector); // shade like the ground below
+            PlantColors.Add(Color);
+        }
+        return Tip;
+    };
+    const auto AddCorolla = [&](const FVector& Centre, float Radius, int32 Petals, const FLinearColor& Color, uint32& State)
+    {
+        const FVector Tilt = FVector(Rand(State) - 0.5f, Rand(State) - 0.5f, 1.6f).GetSafeNormal();
+        const FVector U = FVector::CrossProduct(Tilt, FVector::ForwardVector).GetSafeNormal();
+        const FVector V = FVector::CrossProduct(Tilt, U);
+        const int32 Start = PlantVertices.Num();
+        PlantVertices.Add(Centre);
+        PlantUV.Add({ 1, 1 });
+        const int32 Points = Petals * 2;
+        for (int32 I = 0; I < Points; ++I)
+        {
+            const float A = I * 2.0f * PI / Points;
+            const float R = Radius * (I % 2 == 0 ? 1.0f : 0.45f); // petal tips and the notches between them
+            PlantVertices.Add(Centre + (U * FMath::Cos(A) + V * FMath::Sin(A)) * R);
+            PlantUV.Add({ 1 + (I % 2 == 0 ? 1.0f : 0.45f), 1 });
+            PlantTriangles.Append({ Start, Start + 1 + I, Start + 1 + (I + 1) % Points });
+        }
+        for (int32 I = 0; I <= Points; ++I)
+        {
+            PlantNormals.Add(Tilt);
+            PlantColors.Add(Color);
+        }
+    };
     const auto AddPlant = [&](const FIntVector& Local, EAethraBlock Block)
     {
         const FIntVector Cell = Origin + Local;
-        FLinearColor Color = AethraBlockColor(Block, Cell, FIntVector(0, 0, 1));
-        const bool bGrassy = Block == EAethraBlock::TallGrass || Block == EAethraBlock::Fern;
-        Color.A = bGrassy ? 1.0f : 0.5f;
-        const double Tall = (bGrassy ? 0.9 : Block == EAethraBlock::Sunflower ? 1.0 : 0.75) * CellSizeCm;
+        uint32 State = GetTypeHash(Cell) * 2654435761u + 7u;
+        const FLinearColor Tint = AethraBlockColor(Block, Cell, FIntVector(0, 0, 1));
+        const FLinearColor Stem = AethraBlockColor(EAethraBlock::TallGrass, Cell, FIntVector(0, 0, 1)) * 0.85f;
         const FVector Base = FVector(Local) * CellSizeCm;
-        const FVector Diagonals[2][2] = {
-            { FVector(0.15, 0.15, 0), FVector(0.85, 0.85, 0) },
-            { FVector(0.15, 0.85, 0), FVector(0.85, 0.15, 0) }
-        };
-        for (const auto& Diagonal : Diagonals)
+        const auto Spot = [&]() { return Base + FVector(20 + Rand(State) * 60, 20 + Rand(State) * 60, 0); };
+        if (Block == EAethraBlock::TallGrass || Block == EAethraBlock::Fern)
         {
-            const FVector A = Base + Diagonal[0] * CellSizeCm;
-            const FVector B = Base + Diagonal[1] * CellSizeCm;
-            const int32 Start = PlantVertices.Num();
-            PlantVertices.Append({ A, B, B + FVector(0, 0, Tall), A + FVector(0, 0, Tall) });
-            PlantUV.Append({ {0, 0}, {1, 0}, {1, 1}, {0, 1} }); // V = 0 at the ground (M_AethraPlant relies on it)
-            PlantTriangles.Append({ Start, Start + 2, Start + 1, Start, Start + 3, Start + 2 });
-            for (int32 Vertex = 0; Vertex < 4; ++Vertex)
+            const bool bFern = Block == EAethraBlock::Fern;
+            const int32 Blades = bFern ? 6 : 7;
+            const FVector Centre = Spot();
+            for (int32 I = 0; I < Blades; ++I)
             {
-                PlantNormals.Add(FVector::UpVector); // shade like the ground below
-                PlantColors.Add(Color);
+                const float Yaw = Rand(State) * 2.0f * PI;
+                const FVector Foot = Centre + FVector(Rand(State) - 0.5f, Rand(State) - 0.5f, 0) * (bFern ? 20.0 : 34.0);
+                AddBlade(Foot, Yaw, (bFern ? 45.0f : 40.0f) + Rand(State) * (bFern ? 25.0f : 45.0f),
+                    bFern ? 7.0f : 3.0f, (bFern ? 30.0f : 12.0f) + Rand(State) * 14.0f, Tint);
+            }
+            return;
+        }
+        if (Block == EAethraBlock::Lavender)
+        {
+            for (int32 I = 0; I < 4; ++I)
+            {
+                const FVector Tip = AddBlade(Spot(), Rand(State) * 2.0f * PI, 45.0f + Rand(State) * 20.0f, 2.5f, 6.0f, Stem);
+                // The flowering spike: a narrow purple blade on the stem tip.
+                AddCorolla(Tip, 4.0f, 3, Tint, State);
+                AddBlade(Tip - FVector(0, 0, 14), Rand(State) * 2.0f * PI, 18.0f, 3.5f, 2.0f, Tint);
+            }
+            return;
+        }
+        const bool bSun = Block == EAethraBlock::Sunflower;
+        const FVector Foot = Spot();
+        const FVector Tip = AddBlade(Foot, Rand(State) * 2.0f * PI, bSun ? 95.0f : 48.0f + Rand(State) * 16.0f, bSun ? 4.0f : 2.2f, 6.0f, Stem);
+        AddBlade(Foot, Rand(State) * 2.0f * PI, bSun ? 30.0f : 16.0f, bSun ? 9.0f : 5.0f, bSun ? 22.0f : 12.0f, Stem); // leaves
+        AddBlade(Foot, Rand(State) * 2.0f * PI, bSun ? 26.0f : 14.0f, bSun ? 9.0f : 5.0f, bSun ? 20.0f : 11.0f, Stem);
+        AddCorolla(Tip, bSun ? 20.0f : 9.0f, bSun ? 9 : 5, Tint, State);
+    };
+
+    // Leaves: the leaf blocks keep their cube faces as invisible collision (section 2: digging and
+    // standing on canopies as before); what is seen is foliage clusters (section 4), three cards per
+    // exposed leaf block in random orientations, larger than the block so the crown reads round.
+    TArray<FVector> CardVertices, CardNormals;
+    TArray<int32> CardTriangles;
+    TArray<FVector2D> CardUV;
+    TArray<FLinearColor> CardColors;
+    const auto AddLeafCards = [&](const FIntVector& Local, EAethraBlock Block)
+    {
+        bool bExposed = false;
+        for (const FFace& Face : Faces)
+        {
+            bExposed |= !IsSolid(Local + Face.Normal);
+        }
+        if (!bExposed)
+        {
+            return;
+        }
+        const FIntVector Cell = Origin + Local;
+        uint32 State = GetTypeHash(Cell) * 2246822519u + 3u;
+        FLinearColor Color = AethraBlockColor(Block, Cell, FIntVector(0, 0, 1));
+        const FVector Centre = (FVector(Local) + FVector(0.5)) * CellSizeCm + FVector(Rand(State) - 0.5f, Rand(State) - 0.5f, Rand(State) - 0.5f) * 30.0;
+        for (int32 Card = 0; Card < 3; ++Card)
+        {
+            const FRotator Turn(Rand(State) * 360.0f, Rand(State) * 360.0f, Rand(State) * 360.0f);
+            const FVector U = Turn.RotateVector(FVector::ForwardVector);
+            const FVector V = Turn.RotateVector(FVector::RightVector);
+            const double Half = (0.8 + Rand(State) * 0.25) * CellSizeCm;
+            const int32 Start = CardVertices.Num();
+            CardVertices.Append({ Centre - U * Half - V * Half, Centre + U * Half - V * Half, Centre + U * Half + V * Half, Centre - U * Half + V * Half });
+            CardUV.Append({ {0, 0}, {1, 0}, {1, 1}, {0, 1} });
+            CardTriangles.Append({ Start, Start + 1, Start + 2, Start, Start + 2, Start + 3 });
+            Color.A = Rand(State); // the cluster's own seed for the leaf shapes
+            const FVector Normal = (FVector::CrossProduct(U, V).GetSafeNormal() * 0.3 + FVector::UpVector).GetSafeNormal();
+            for (int32 V4 = 0; V4 < 4; ++V4)
+            {
+                CardNormals.Add(Normal);
+                CardColors.Add(Color);
             }
         }
     };
@@ -213,6 +313,10 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
                 {
                     AddPlant(Local, Block);
                     continue;
+                }
+                if (IsLeaves(Block))
+                {
+                    AddLeafCards(Local, Block); // and the cube faces below, as collision only
                 }
                 if (Block == EAethraBlock::Water && bSmoothWater)
                 {
@@ -309,6 +413,18 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
         }
         Mesh->CreateMeshSection_LinearColor(Section, S.Vertices, S.Triangles, S.Normals, S.UV, S.Colors, {},
             Section != 3, false);
+        if (Section == 2)
+        {
+            Mesh->SetMeshSectionVisible(2, false); // leaf cubes: collision only, the cards are drawn
+        }
+    }
+    if (CardVertices.IsEmpty())
+    {
+        Mesh->ClearMeshSection(4);
+    }
+    else
+    {
+        Mesh->CreateMeshSection_LinearColor(4, CardVertices, CardTriangles, CardNormals, CardUV, CardColors, {}, false, false);
     }
     if (PlantVertices.IsEmpty())
     {

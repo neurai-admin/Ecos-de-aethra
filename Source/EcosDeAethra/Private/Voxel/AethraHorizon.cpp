@@ -1,5 +1,7 @@
 #include "Voxel/AethraHorizon.h"
 
+#include "VisualWorld/AethraBlockGen.h"
+
 #include "Async/Async.h"
 #include "Materials/MaterialInterface.h"
 #include "ProceduralMeshComponent.h"
@@ -60,19 +62,24 @@ AAethraHorizon::FMeshData AAethraHorizon::BuildTile(int32 Seed, FIntPoint Tile, 
     Heights.SetNumUninitialized(Row * Row);
     Tops.SetNumUninitialized(Row * Row);
     TStaticArray<EAethraBlock, Height> Column;
+    const bool bBlockWorld = FAethraBlockGen::IsAethraSeed(Seed);
     for (int32 J = -1; J <= Count; ++J)
     {
         for (int32 I = -1; I <= Count; ++I)
         {
             GenerateColumn(Base + FIntPoint(I, J) * Step, Seed, Column);
             int32 Top = Height - 1;
-            while (Top >= 0 && !IsSurface(Column[Top])) // plants are too small for the horizon
+            // Block world: far trees are not boxes on the horizon; a canopy only tints the ground below.
+            bool bCanopy = false;
+            while (Top >= 0 && (!IsSurface(Column[Top]) // plants are too small for the horizon
+                || (bBlockWorld && (IsLeaves(Column[Top]) || Column[Top] == EAethraBlock::Wood || Column[Top] == EAethraBlock::BirchWood))))
             {
+                bCanopy |= IsLeaves(Column[Top]);
                 --Top;
             }
             const int32 Slot = (J + 1) * Row + I + 1;
             Heights[Slot] = Top + 1; // 0 = no ground (outside the world)
-            Tops[Slot] = Top >= 0 ? Column[Top] : EAethraBlock::Air;
+            Tops[Slot] = Top >= 0 ? (bCanopy ? EAethraBlock::Leaves : Column[Top]) : EAethraBlock::Air;
         }
     }
 
