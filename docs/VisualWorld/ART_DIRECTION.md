@@ -65,20 +65,20 @@ Detalhes em [FLORA.md](FLORA.md).
 | Mobs | Sem zumbis ou monstros hostis tradicionais nesta etapa: o interesse das cavernas vem de geologia, mistério e recursos | — |
 | Fauna | Animais naturais e espécies próprias ficam para o futuro; nenhum animal nesta entrega | [ROADMAP.md](ROADMAP.md) |
 
-## Tipografia (referência de estilo, 21/11/2026)
+## Tipografia (22/11/2026)
 
-A Mojangles, fonte do Minecraft (https://pt.minecraft.wiki/w/Mojangles), é só uma **referência de estilo**: letras pixeladas em blocos, de leitura clara no HUD e em placas. Ela pertence à Mojang/Microsoft e **não foi usada nem copiada**.
+Decisão do diretor criativo: **nada do Minecraft**. As fontes em pixel da primeira versão, que tinham o Mojangles como referência de estilo, foram removidas.
 
-ECOS DE AETHRA tem **fontes próprias**, desenhadas glifo a glifo em `Tools/Fonts/make_aethra_fonts.py`. O script gera TrueType só com a biblioteca padrão do Python.
+ECOS DE AETHRA tem letras **próprias, entalhadas**, desenhadas traço a traço em `Tools/Fonts/make_aethra_fonts.py`. Não são pixel e não copiam nem decalcam nenhuma outra fonte. O script gera TrueType só com a biblioteca padrão do Python.
 
 | Fonte | Uso | Desenho |
 | --- | --- | --- |
-| Aethra Pixel | Texto, HUD, placas | Maiúsculas 5 × 7, minúsculas com altura-x de 5 e descendentes; pixels quadrados |
-| Aethra Pixel Bold | Avisos e ênfase | Os mesmos glifos um pixel mais pesados, sem fechar os vãos de 1 pixel (m e w continuam abertos) |
-| Aethra Runa | Títulos e nomes de lugares | O mesmo esqueleto com "pixels" octogonais, com ar de pedra lavrada |
+| Aethra Entalhe | Texto, HUD, placas | Traços retos de cinzel, curvas cortadas em octógono, pontas soltas cortadas em diagonal, como deixa o cinzel na pedra |
+| Aethra Entalhe Bold | Avisos, contadores, ênfase | As mesmas letras com traço mais pesado |
+| Aethra Runa | Títulos e nomes de lugares | Traço pesado com cunhas nas pontas soltas, como inscrições |
 
 - **Cobertura:** 149 glifos. ASCII completo, acentos do português e do espanhol (á à â ã ä é ê í ó ô õ ú ü ç ñ, também em maiúsculas), mais ° º ª « ».
-- **Escala:** 100 unidades por pixel e 1000 por em. As fontes ficam nítidas quando o em é múltiplo de 10 px; o HUD usa 15 pt, que dá 20 px.
+- **Escala:** 1000 unidades por em. Maiúsculas têm 700 de altura e minúsculas 480 de altura-x. O HUD usa 16 pt e o título do menu 44 pt, com hinting automático.
 - **Arquivos:**
   - fontes e amostra em `SourceArt/Fonts` ([specimen](captures/08/fontes-specimen.png));
   - na UE, Font Faces em `/Game/UI/Fonts` (importadas por `Tools/Editor/import_aethra_fonts.py`, sem hinting, dados embutidos no asset);

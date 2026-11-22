@@ -15,7 +15,7 @@ Sem nenhum parâmetro, o jogo abre o mundo em blocos (seed 125 do WorldGen):
 
 | Parâmetro | Mundo |
 | --- | --- |
-| nenhum | Mundo em blocos de Aethra (seed 125) |
+| nenhum | O último mundo jogado (na primeira vez, o mundo em blocos de Aethra, seed 125) |
 | `-AethraClassic` | Mundo voxel original (seed 42819) e seus saves |
 | `-AethraSeed=<n>` | Qualquer seed; com o bit 30 ligado, é um mundo em blocos |
 | `-AethraElden` | Demo da vila de Elden (sem mudança) |
@@ -61,6 +61,22 @@ local antes do entalhe. Agora o rio corre dentro do próprio leito. Os testes de
 - As margens são de grama e sobem um bloco a cada 1,5 m. Até 3 m da água, o chão fica logo abaixo da superfície, então a água encontra a margem sem degrau.
 - `FWorldSample::ShoreLevel` dá o nível da água próxima também em terra seca. É um campo novo; nada que já existia mudou de valor.
 - Os blocos não têm mais chanfro nem variação de cor por bloco. A granulação do material segue as coordenadas do mundo e atravessa as bordas, então chão vizinho lê como uma superfície só. Tijolos, tábuas e troncos mantêm o desenho por bloco.
+
+## Base do jogo
+
+- **Inventário:** cinto de 8 espaços, com pilhas de até 99.
+  - Cavar coleta o bloco; plantas e água não dão nada.
+  - Colocar gasta um bloco do espaço escolhido; com o espaço vazio, nada é colocado.
+  - 1–8 ou a roda do mouse escolhem o espaço.
+  - Cada mundo salva o seu inventário (`Saved/SaveGames/AethraInventory_<seed>.inv`).
+- **Nado:** com o corpo na água, o personagem nada.
+  - Espaço sobe; parado, afunda devagar; olhar para baixo e andar mergulha.
+  - Segurar espaço ao chegar na margem dá o impulso para sair.
+- **Menu de mundos:** aparece ao abrir o jogo e com Esc.
+  - Opções: Continuar, mundos salvos (os 6 mais recentes), Novo mundo de Aethra (semente aleatória), Mundo clássico e Sair.
+  - O jogo lembra o último mundo jogado (`Saved/AethraLastWorld.txt`).
+  - `-AethraNoMenu` pula o menu. O benchmark e as capturas automáticas também pulam.
+- **Interface:** fontes entalhadas próprias, cinto com cantos cortados e moldura dourada, menu em painéis entalhados. Nada da interface vem do Minecraft.
 
 ## Blocos novos
 

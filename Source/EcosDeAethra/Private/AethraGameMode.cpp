@@ -21,6 +21,9 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
+#include "Kismet/GameplayStatics.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 
 AAethraGameMode::AAethraGameMode()
 {
@@ -50,17 +53,39 @@ AAethraVoxelWorld* AAethraGameMode::EnsureVoxelWorld()
         // LIS saves: the player's world is never touched); -AethraSeed=<n> picks any seed.
         // Default: the Aethra block world (Visual World generators in 1 m blocks, its own flagged seed and
         // saves); -AethraClassic opens the original voxel world (seed 42819) and its saves.
+        // The world menu reopens the map with ?AethraSeed=<n>; without it, the last world played.
+        const FString LastWorldFile = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("AethraLastWorld.txt"));
         int32 Seed = 0;
-        bool bSeed = FParse::Value(FCommandLine::Get(), TEXT("AethraSeed="), Seed);
-        if (!bSeed && FParse::Param(FCommandLine::Get(), TEXT("AethraElden")))
+        bool bSeed = UGameplayStatics::HasOption(OptionsString, TEXT("AethraSeed"));
+        if (bSeed)
+        {
+            Seed = UGameplayStatics::GetIntOption(OptionsString, TEXT("AethraSeed"), 0);
+        }
+        bSeed = bSeed || FParse::Value(FCommandLine::Get(), TEXT("AethraSeed="), Seed);
+        const bool bElden = !bSeed && FParse::Param(FCommandLine::Get(), TEXT("AethraElden"));
+        if (bElden)
         {
             Seed = FAethraLisVillage::DemoSeed;
             bSeed = true;
         }
-        if (!bSeed && !FParse::Param(FCommandLine::Get(), TEXT("AethraClassic")))
+        if (!bSeed && FParse::Param(FCommandLine::Get(), TEXT("AethraClassic")))
+        {
+            Seed = 42819; // AAethraVoxelWorld's default
+            bSeed = true;
+        }
+        FString Last;
+        if (!bSeed && FFileHelper::LoadFileToString(Last, *LastWorldFile) && LexTryParseString(Seed, *Last.TrimStartAndEnd()) && Seed != 0)
+        {
+            bSeed = true;
+        }
+        if (!bSeed)
         {
             Seed = FAethraBlockGen::MakeSeed(AAethraVisualWorld::DemoSeed);
             bSeed = true;
+        }
+        if (!bElden && !FCString::Strifind(FCommandLine::Get(), TEXT("-AethraBench=")))
+        {
+            FFileHelper::SaveStringToFile(FString::FromInt(Seed), *LastWorldFile);
         }
         for (TActorIterator<AAethraVoxelWorld> It(GetWorld()); It; ++It)
         {

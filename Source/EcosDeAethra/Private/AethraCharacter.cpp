@@ -1,6 +1,8 @@
 #include "AethraCharacter.h"
 
 #include "AethraGameMode.h"
+#include "AethraHUD.h"
+#include "GameFramework/PlayerController.h"
 #include "AethraVoxelWorld.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -30,13 +32,27 @@ void AAethraCharacter::BeginPlay()
 {
     Super::BeginPlay();
     FParse::Value(FCommandLine::Get(), TEXT("AethraBench="), BenchSeconds);
-    SetActorTickEnabled(BenchSeconds > 0.0f);
+    SetActorTickEnabled(true); // swimming and the inventory need it too
 }
 
 void AAethraCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     APlayerController* PC = Cast<APlayerController>(GetController());
+    const AAethraGameMode* Mode = GetWorld()->GetAuthGameMode<AAethraGameMode>();
+    if (AAethraVoxelWorld* Terrain = Mode ? Mode->GetVoxelWorld() : nullptr)
+    {
+        if (InventorySeed != Terrain->Seed)
+        {
+            InventorySeed = Terrain->Seed;
+            Inventory = FAethraInventory();
+            Inventory.Load(FAethraInventory::PathFor(InventorySeed)); // a new world starts empty
+        }
+        if (BenchSeconds <= 0.0f)
+        {
+            UpdateSwimming(*Terrain);
+        }
+    }
     if (BenchSeconds <= 0.0f || !PC)
     {
         return;
@@ -108,21 +124,27 @@ void AAethraCharacter::SetupPlayerInputComponent(UInputComponent* Input)
     Input->BindAxis(TEXT("MoveRight"), this, &AAethraCharacter::MoveRight);
     Input->BindAxis(TEXT("LookYaw"), this, &AAethraCharacter::AddControllerYawInput);
     Input->BindAxis(TEXT("LookPitch"), this, &AAethraCharacter::AddControllerPitchInput);
-    Input->BindAction(TEXT("Jump"), IE_Pressed, this, &AAethraCharacter::Jump);
-    Input->BindAction(TEXT("Jump"), IE_Released, this, &AAethraCharacter::StopJumping);
+    Input->BindAction(TEXT("Jump"), IE_Pressed, this, &AAethraCharacter::JumpPressed);
+    Input->BindAction(TEXT("Jump"), IE_Released, this, &AAethraCharacter::JumpReleased);
+    Input->BindAction(TEXT("Menu"), IE_Pressed, this, &AAethraCharacter::ToggleMenu);
     Input->BindAction(TEXT("RemoveBlock"), IE_Pressed, this, &AAethraCharacter::RemoveBlock);
     Input->BindAction(TEXT("PlaceBlock"), IE_Pressed, this, &AAethraCharacter::PlaceBlock);
 
-    const auto BindBlock = [this, Input](const TCHAR* Action, EAethraBlock Block)
+    // Hotbar: 1-9 pick a slot, the mouse wheel cycles.
+    for (int32 Slot = 0; Slot < FAethraInventory::Slots; ++Slot)
+    {
+        FInputActionBinding Binding(FName(*FString::Printf(TEXT("Slot%d"), Slot + 1)), IE_Pressed);
+        Binding.ActionDelegate.GetDelegateForManualSet().BindLambda([this, Slot] { SelectSlot(Slot); });
+        Input->AddActionBinding(Binding);
+    }
+    const auto BindCycle = [this, Input](const TCHAR* Action, int32 Step)
     {
         FInputActionBinding Binding(FName(Action), IE_Pressed);
-        Binding.ActionDelegate.GetDelegateForManualSet().BindLambda([this, Block] { SelectBlock(Block); });
+        Binding.ActionDelegate.GetDelegateForManualSet().BindLambda([this, Step] { SelectSlot(Inventory.Selected + Step); });
         Input->AddActionBinding(Binding);
     };
-    BindBlock(TEXT("SelectGrass"), EAethraBlock::Grass);
-    BindBlock(TEXT("SelectDirt"), EAethraBlock::Dirt);
-    BindBlock(TEXT("SelectStone"), EAethraBlock::Stone);
-    BindBlock(TEXT("SelectSand"), EAethraBlock::Sand);
+    BindCycle(TEXT("SlotNext"), 1);
+    BindCycle(TEXT("SlotPrev"), -1);
 
     const auto BindQuality = [this, Input](const TCHAR* Action, int32 Level)
     {
@@ -142,7 +164,73 @@ bool AAethraCharacter::HasRecentEditFailure() const
 
 void AAethraCharacter::MoveForward(float Value)
 {
-    AddMovementInput(GetActorForwardVector(), Value);
+    // Swimming follows the view, so looking down dives.
+    AddMovementInput(bSwimming ? Camera->GetForwardVector() : GetActorForwardVector(), Value);
+}
+
+void AAethraCharacter::JumpPressed()
+{
+    bSwimUp = true;
+    Jump();
+}
+
+void AAethraCharacter::JumpReleased()
+{
+    bSwimUp = false;
+    StopJumping();
+}
+
+void AAethraCharacter::UpdateSwimming(AAethraVoxelWorld& Terrain)
+{
+    UCharacterMovementComponent* Move = GetCharacterMovement();
+    const bool bInWater = Terrain.GetBlock(AethraTerrain::CellAt(GetActorLocation())) == EAethraBlock::Water;
+    if (bInWater && !bSwimming)
+    {
+        bSwimming = true;
+        Move->SetMovementMode(MOVE_Flying);
+        Move->MaxFlySpeed = 300.0f;
+        Move->BrakingDecelerationFlying = 1400.0f;
+        Move->Velocity *= 0.3f; // the splash takes the speed
+    }
+    else if (!bInWater && bSwimming)
+    {
+        bSwimming = false;
+        Move->SetMovementMode(MOVE_Falling);
+        if (bSwimUp)
+        {
+            LaunchCharacter(FVector(0, 0, 520), false, true); // climb out onto the bank
+        }
+    }
+    if (bSwimming)
+    {
+        AddMovementInput(FVector::UpVector, bSwimUp ? 1.0f : -0.25f); // slow sinking unless swimming up
+    }
+}
+
+void AAethraCharacter::ToggleMenu()
+{
+    if (APlayerController* PC = Cast<APlayerController>(GetController()))
+    {
+        if (AAethraHUD* Hud = Cast<AAethraHUD>(PC->GetHUD()))
+        {
+            Hud->SetMenuOpen(!Hud->IsMenuOpen());
+        }
+    }
+}
+
+bool AAethraCharacter::IsMenuOpen() const
+{
+    const APlayerController* PC = Cast<APlayerController>(GetController());
+    const AAethraHUD* Hud = PC ? Cast<AAethraHUD>(PC->GetHUD()) : nullptr;
+    return Hud && Hud->IsMenuOpen();
+}
+
+void AAethraCharacter::SaveInventory() const
+{
+    if (InventorySeed != 0 && BenchSeconds <= 0.0f)
+    {
+        Inventory.Save(FAethraInventory::PathFor(InventorySeed));
+    }
 }
 
 void AAethraCharacter::MoveRight(float Value)
@@ -160,9 +248,9 @@ void AAethraCharacter::PlaceBlock()
     EditBlock(true);
 }
 
-void AAethraCharacter::SelectBlock(EAethraBlock Block)
+void AAethraCharacter::SelectSlot(int32 Slot)
 {
-    SelectedBlock = Block;
+    Inventory.Select(Slot);
 }
 
 void AAethraCharacter::ApplyQuality(int32 Level)
@@ -183,6 +271,10 @@ void AAethraCharacter::ApplyQuality(int32 Level)
 
 void AAethraCharacter::EditBlock(bool bPlace)
 {
+    if (IsMenuOpen())
+    {
+        return;
+    }
     const AAethraGameMode* Mode = GetWorld()->GetAuthGameMode<AAethraGameMode>();
     AAethraVoxelWorld* Terrain = Mode ? Mode->GetVoxelWorld() : nullptr;
     if (!Terrain)
@@ -220,6 +312,7 @@ void AAethraCharacter::EditBlock(bool bPlace)
     }
     if (!bPlace)
     {
+        const EAethraBlock Dug = Terrain->GetBlock(Target);
         if (!Terrain->SetBlockBy(Target, EAethraBlock::Air, FAethraInstigator::Player()))
         {
             ShowEditFailureUntil = GetWorld()->GetTimeSeconds() + 1.5;
@@ -231,6 +324,16 @@ void AAethraCharacter::EditBlock(bool bPlace)
         {
             Terrain->SetBlockBy(Above, EAethraBlock::Air, FAethraInstigator::Player());
         }
+        if (Inventory.Add(FAethraInventory::DropOf(Dug))) // a full hotbar drops nothing
+        {
+            SaveInventory();
+        }
+        return;
+    }
+    const EAethraBlock ToPlace = Inventory.SelectedBlock();
+    if (ToPlace == EAethraBlock::Air)
+    {
+        ShowEditFailureUntil = GetWorld()->GetTimeSeconds() + 1.5; // empty slot
         return;
     }
 
@@ -257,8 +360,16 @@ void AAethraCharacter::EditBlock(bool bPlace)
 
     const FVector Min = FVector(Destination) * AethraTerrain::CellSizeCm;
     const FBox BlockBounds(Min + FVector(0.1), Min + FVector(AethraTerrain::CellSizeCm - 0.1));
-    if (!GetCapsuleComponent()->Bounds.GetBox().Intersect(BlockBounds)
-        && !Terrain->SetBlockBy(Destination, SelectedBlock, FAethraInstigator::Player()))
+    if (GetCapsuleComponent()->Bounds.GetBox().Intersect(BlockBounds))
+    {
+        return;
+    }
+    if (Terrain->SetBlockBy(Destination, ToPlace, FAethraInstigator::Player()))
+    {
+        Inventory.SpendSelected();
+        SaveInventory();
+    }
+    else
     {
         ShowEditFailureUntil = GetWorld()->GetTimeSeconds() + 1.5;
     }

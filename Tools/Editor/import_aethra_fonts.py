@@ -9,8 +9,12 @@ import os
 import unreal
 
 PATH = "/Game/UI/Fonts"
-FACES = [("AethraPixel-Regular.ttf", "FF_AethraPixel_Regular"), ("AethraPixel-Bold.ttf", "FF_AethraPixel_Bold"),
+FACES = [("AethraEntalhe-Regular.ttf", "FF_AethraEntalhe_Regular"), ("AethraEntalhe-Bold.ttf", "FF_AethraEntalhe_Bold"),
          ("AethraRuna-Regular.ttf", "FF_AethraRuna_Regular")]
+# The pixel faces of the first version are removed: the game has its own carved letters now.
+for old in ("FF_AethraPixel_Regular", "FF_AethraPixel_Bold"):
+    if unreal.EditorAssetLibrary.does_asset_exist(f"{PATH}/{old}"):
+        unreal.EditorAssetLibrary.delete_asset(f"{PATH}/{old}")
 eal = unreal.EditorAssetLibrary
 source = os.path.join(unreal.Paths.project_dir(), "SourceArt", "Fonts")
 
@@ -29,8 +33,8 @@ for file, name in FACES:
     face = eal.load_asset(full)
     if not isinstance(face, unreal.FontFace):
         raise RuntimeError(f"{file} did not import as a FontFace: {face}")
-    # Pixel fonts: no hinting (it would bend the square pixels) and the data inside the asset.
-    face.set_editor_property("hinting", unreal.FontHinting.NONE)
+    # Outline fonts: the engine's auto hinting keeps the strokes sharp at HUD sizes; data inside the asset.
+    face.set_editor_property("hinting", unreal.FontHinting.AUTO)
     face.set_editor_property("loading_policy", unreal.FontLoadingPolicy.INLINE)
     if not eal.save_asset(full, only_if_is_dirty=False):
         raise RuntimeError(f"Could not save {full}")
