@@ -93,6 +93,9 @@ public:
     // Signed density at P (metres): > 0 rock, < 0 air. Includes the terrain surface, caves and edits.
     float Density(const FVector& P) const;
     bool IsAir(const FVector& P) const { return Density(P) < 0.f; }
+    // Rock density of the caves alone (no terrain surface, no edits): < 0 inside a cave. For generators
+    // that place the surface themselves (the block world).
+    float CaveDensity(const FVector& P) const;
 
     // Edits. Returns the blocks the edit touches (to rebuild).
     void AddEdit(const FCaveEdit& Edit, TArray<FIntVector>& OutBlocks);

@@ -5,6 +5,7 @@
 #include "AethraLisDirector.h"
 #include "AethraLisVillage.h"
 #include "AethraVoxelWorld.h"
+#include "VisualWorld/AethraBlockGen.h"
 #include "VisualWorld/AethraVisualWorld.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyLightComponent.h"
@@ -47,11 +48,18 @@ AAethraVoxelWorld* AAethraGameMode::EnsureVoxelWorld()
     {
         // LIS 03 demo: -AethraElden opens the Elden village demo world (its own seed, so its own voxel and
         // LIS saves: the player's world is never touched); -AethraSeed=<n> picks any seed.
+        // Default: the Aethra block world (Visual World generators in 1 m blocks, its own flagged seed and
+        // saves); -AethraClassic opens the original voxel world (seed 42819) and its saves.
         int32 Seed = 0;
         bool bSeed = FParse::Value(FCommandLine::Get(), TEXT("AethraSeed="), Seed);
         if (!bSeed && FParse::Param(FCommandLine::Get(), TEXT("AethraElden")))
         {
             Seed = FAethraLisVillage::DemoSeed;
+            bSeed = true;
+        }
+        if (!bSeed && !FParse::Param(FCommandLine::Get(), TEXT("AethraClassic")))
+        {
+            Seed = FAethraBlockGen::MakeSeed(AAethraVisualWorld::DemoSeed);
             bSeed = true;
         }
         for (TActorIterator<AAethraVoxelWorld> It(GetWorld()); It; ++It)
@@ -116,7 +124,7 @@ void AAethraGameMode::StartPlay()
         {
             // -AethraElden: the isolated demo world, where the village may fell generated trees on its plots.
             Director->bDemoVillage = FParse::Param(FCommandLine::Get(), TEXT("AethraElden"));
-            Director->Start(VoxelWorld, FIntPoint(6, 20)); // just ahead of the spawn view
+            Director->Start(VoxelWorld, VoxelWorld->SpawnColumn() + FIntPoint(6, 20)); // just ahead of the spawn view
         }
     }
     Super::StartPlay();
@@ -150,7 +158,8 @@ AActor* AAethraGameMode::ChoosePlayerStart_Implementation(AController* Player)
             FActorSpawnParameters Params;
             Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
             Params.ObjectFlags |= RF_Transient;
-            VoxelStart = GetWorld()->SpawnActor<APlayerStart>(Start, FRotator(0, 70, 0), Params);
+            const float Yaw = FAethraBlockGen::IsAethraSeed(Terrain->Seed) ? FAethraBlockGen::Get(Terrain->Seed).SpawnYaw() : 70.f;
+            VoxelStart = GetWorld()->SpawnActor<APlayerStart>(Start, FRotator(0, Yaw, 0), Params);
         }
         else
         {

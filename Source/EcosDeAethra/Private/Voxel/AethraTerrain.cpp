@@ -1,5 +1,7 @@
 #include "Voxel/AethraTerrain.h"
 
+#include "VisualWorld/AethraBlockGen.h"
+
 namespace
 {
     uint32 Hash(FIntPoint Point, int32 Seed, uint32 Salt)
@@ -127,12 +129,13 @@ namespace AethraTerrain
 
     bool IsKnownBlock(EAethraBlock Block)
     {
-        return static_cast<uint8>(Block) <= static_cast<uint8>(EAethraBlock::BirchLeaves);
+        return static_cast<uint8>(Block) <= static_cast<uint8>(EAethraBlock::Ceramic);
     }
 
     bool IsPlant(EAethraBlock Block)
     {
-        return Block >= EAethraBlock::TallGrass && Block <= EAethraBlock::FlowerYellow;
+        return (Block >= EAethraBlock::TallGrass && Block <= EAethraBlock::FlowerYellow)
+            || (Block >= EAethraBlock::Sunflower && Block <= EAethraBlock::Fern);
     }
 
     bool IsLeaves(EAethraBlock Block)
@@ -157,6 +160,10 @@ namespace AethraTerrain
 
     int32 SurfaceAt(FIntPoint Point, int32 Seed)
     {
+        if (FAethraBlockGen::IsAethraSeed(Seed))
+        {
+            return FAethraBlockGen::Get(Seed).SurfaceAt(Point);
+        }
         const int32 RiverX = Noise(FIntPoint(0, Point.Y), Seed, 44, 14, 0xD612);
         const int32 Rise = FMath::Min(FMath::Abs(Point.X - RiverX) / 2, 19);
         const int32 Hills = Noise(Point, Seed, 32, 11, 0x9DE1);
@@ -167,6 +174,11 @@ namespace AethraTerrain
 
     void GenerateColumn(FIntPoint Point, int32 Seed, TStaticArray<EAethraBlock, Height>& Column)
     {
+        if (FAethraBlockGen::IsAethraSeed(Seed))
+        {
+            FAethraBlockGen::Get(Seed).GenerateColumn(Point, Column);
+            return;
+        }
         for (EAethraBlock& Block : Column)
         {
             Block = EAethraBlock::Air;

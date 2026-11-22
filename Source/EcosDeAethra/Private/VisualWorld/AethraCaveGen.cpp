@@ -335,6 +335,23 @@ float FAethraCaveGen::Carve(const FVector& P) const
     return Best;
 }
 
+float FAethraCaveGen::CaveDensity(const FVector& P) const
+{
+    float D = -Carve(P);
+    for (const FCaveSystem& S : CaveSystems)
+    {
+        if (S.Bounds.IsInside(P))
+        {
+            for (const FCaveColumn& Col : S.Columns)
+            {
+                float U = 0.f;
+                D = FMath::Max(D, Col.Radius * (1.f + .25f * FMath::Sin(static_cast<float>(P.Z) * .7f)) - CaveSegment(P, Col.A, Col.B, U));
+            }
+        }
+    }
+    return D;
+}
+
 float FAethraCaveGen::Density(const FVector& P) const
 {
     float D = Ground(FVector2D(P.X, P.Y)) - static_cast<float>(P.Z);

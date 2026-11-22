@@ -80,7 +80,7 @@ if (id == 1 && !top && !bottom)                   // grass side: ragged green fr
 }
 if (id == 1)      { k = 0.82 + 0.30 * g; if (top && g > 0.93) k *= 1.15; col *= drift; }
 else if (id == 2) { float clump = fn.H(int3(t / 2, face) + cell * 37); k = 0.78 + 0.22 * clump + 0.12 * g; if (g > 0.95) k = 1.25; }
-else if (id == 3)                                 // stone: flat slabs, lighter patches, dark seams
+else if (id == 3 || (id >= 17 && id <= 21))      // stone and the WorldGen rocks: flat slabs, lighter patches, dark seams
 {
     float v = fn.V(uv * 4.0 + float2(cell.xy) * 4.0 + face * 13.0, 3);
     k = 0.86 + 0.12 * g;
@@ -103,6 +103,19 @@ else if (id == 5 || id == 13)                     // oak / birch: rings on cut f
 else if (id == 6 || id == 7 || id == 14) { k = 0.70 + 0.45 * g; col *= drift; } // leaves seen on the horizon
 else if (id == 11) { k = 0.95 + 0.05 * g; rough = 0.55; }
 else if (id == 12) { k = 0.95 + 0.06 * g; rough = 0.08; }
+else if (id == 15) { float peb = fn.H(int3(t / 3, face) + cell * 37); k = 0.70 + 0.45 * peb + 0.08 * g; if ((t.x + t.y) % 3 == 0 && g > 0.7) k *= 0.6; } // gravel: pebbles
+else if (id == 16) { k = 0.85 + 0.18 * fn.V(uv * 3.0 + float2(cell.xy) * 3.0, 5) + 0.06 * g; rough = 0.6; }   // mud: wet, smooth
+else if (id == 22) { float v = fn.V(uv * 3.0 + float2(cell.xy) * 3.0 + face * 7.0, 9); k = 0.97 + 0.04 * g; if (abs(v - 0.5) < 0.03) k = 0.70; rough = 0.45; } // marble: veins
+else if (id == 23)                                // stone bricks: 2 courses, offset joints
+{
+    int row = t.y / 8; int jx = (t.x + (row % 2) * 4) % 8;
+    k = (t.y % 8 == 0 || jx == 0) ? 0.62 : 0.88 + 0.14 * fn.H(int3((t.x + (row % 2) * 4) / 8, row, face) + cell * 37) + 0.06 * g;
+    rough = 0.8;
+}
+else if (id == 24) { k = (t.y % 4 == 0 ? 0.68 : 0.92 + 0.10 * g) * (0.9 + 0.15 * fn.H(int3(0, t.y / 4, face) + cell * 37)); } // planks
+else if (id == 25) { k = (t.y % 4 == 3 ? 0.66 : 0.95 + 0.06 * g) * ((t.x + (t.y / 4) * 2) % 4 == 0 ? 0.85 : 1.0); rough = 0.7; } // roof tiles
+else if (id == 26) { float facet = fn.H(int3(t / 4, face) + cell * 37); k = 0.85 + 0.55 * facet; rough = 0.15; } // Aetherite crystal
+else if (id == 31) { k = 0.94 + 0.06 * g; if (t.y % 8 == 4) k = 0.78; rough = 0.5; } // ceramic
 float3 e = min(f, 1.0 - f) + an;                  // soft bevel at block edges
 float bevel = lerp(0.82, 1.0, smoothstep(0.0, 0.045, min(e.x, min(e.y, e.z))));
 k = lerp(k * bevel, 1.0, saturate((D - 3000.0) / 9000.0));

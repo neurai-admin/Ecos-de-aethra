@@ -40,6 +40,8 @@ public:
     void GetColumn(FIntPoint Point, TArray<EAethraBlock>& OutColumn) const;
 
     FVector PrepareSpawn();
+    // Spawn column: the origin, or a dry gentle column in the Aethra block world (seeds with its flag).
+    FIntPoint SpawnColumn() const;
     void SetStreamingRadius(int32 Radius);
 
 private:

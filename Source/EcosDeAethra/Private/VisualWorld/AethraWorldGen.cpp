@@ -491,7 +491,9 @@ FWorldSample FAethraWorldGen::Sample(FVector2D P) const
         const float D = Bilinear(RiverDist, R);
         if (Near >= 0 && RiverBodyAt[Near] >= 0)
         {
-            const float Level = Bilinear(RiverLevel, R);
+            // The surface stays below the land it flows through (the drainage level can sit metres above
+            // the local ground, which made the water stand above its own banks).
+            const float Level = FMath::Min(Bilinear(RiverLevel, R), H - .8f);
             const float Half = .5f * Bilinear(RiverWidth, R);
             const float Depth = Bilinear(RiverDepth, R);
             // Carve: a parabolic bed inside the channel; a short steep bank, then a gentle rise.

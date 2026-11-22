@@ -172,8 +172,9 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
     {
         const FIntVector Cell = Origin + Local;
         FLinearColor Color = AethraBlockColor(Block, Cell, FIntVector(0, 0, 1));
-        Color.A = Block == EAethraBlock::TallGrass ? 1.0f : 0.5f;
-        const double Tall = (Block == EAethraBlock::TallGrass ? 0.9 : 0.75) * CellSizeCm;
+        const bool bGrassy = Block == EAethraBlock::TallGrass || Block == EAethraBlock::Fern;
+        Color.A = bGrassy ? 1.0f : 0.5f;
+        const double Tall = (bGrassy ? 0.9 : Block == EAethraBlock::Sunflower ? 1.0 : 0.75) * CellSizeCm;
         const FVector Base = FVector(Local) * CellSizeCm;
         const FVector Diagonals[2][2] = {
             { FVector(0.15, 0.15, 0), FVector(0.85, 0.85, 0) },

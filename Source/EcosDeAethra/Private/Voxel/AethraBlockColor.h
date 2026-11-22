@@ -23,6 +23,23 @@ inline FLinearColor AethraBlockColor(EAethraBlock Block, const FIntVector& Cell,
     case EAethraBlock::Water: Tint = FColor(44, 92, 112); break;
     case EAethraBlock::BirchWood: Tint = Normal.Z == 0 ? FColor(218, 214, 200) : FColor(196, 170, 120); break;
     case EAethraBlock::BirchLeaves: Tint = FColor(112, 158, 64); break;
+    case EAethraBlock::Gravel: Tint = FColor(128, 124, 118); break;
+    case EAethraBlock::Mud: Tint = FColor(84, 66, 48); break;
+    case EAethraBlock::Basalt: Tint = FColor(62, 64, 70); break;
+    case EAethraBlock::Limestone: Tint = FColor(196, 190, 170); break;
+    case EAethraBlock::Sandstone: Tint = FColor(206, 166, 110); break;
+    case EAethraBlock::Slate: Tint = FColor(78, 88, 100); break;
+    case EAethraBlock::Marble: Tint = FColor(226, 222, 214); break;
+    case EAethraBlock::StoneBricks: Tint = FColor(140, 138, 132); break;
+    case EAethraBlock::Planks: Tint = FColor(160, 118, 70); break;
+    case EAethraBlock::RoofTiles: Tint = FColor(156, 70, 52); break;
+    case EAethraBlock::Aetherite: Tint = FColor(96, 214, 236); break;
+    case EAethraBlock::Sunflower: Tint = FColor(244, 196, 40); break;
+    case EAethraBlock::Lavender: Tint = FColor(148, 112, 206); break;
+    case EAethraBlock::FlowerWhite: Tint = FColor(240, 238, 228); break;
+    case EAethraBlock::FlowerBlue: Tint = FColor(76, 126, 222); break;
+    case EAethraBlock::Fern: Tint = FColor(70, 132, 60); break;
+    case EAethraBlock::Ceramic: Tint = FColor(184, 108, 70); break;
     default: Tint = FColor::White; break;
     }
 

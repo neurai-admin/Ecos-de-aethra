@@ -21,7 +21,26 @@ enum class EAethraBlock : uint8
     Snow,
     Water,
     BirchWood,
-    BirchLeaves
+    BirchLeaves,
+    // Aethra block world (WorldGen soils and rocks, ruins, enchanted caves, FloraGen plants).
+    // Ids stop at 31: the materials read the id from vertex alpha / 31.
+    Gravel,
+    Mud,
+    Basalt,
+    Limestone,
+    Sandstone,
+    Slate,
+    Marble,
+    StoneBricks,
+    Planks,
+    RoofTiles,
+    Aetherite,
+    Sunflower,
+    Lavender,
+    FlowerWhite,
+    FlowerBlue,
+    Fern,
+    Ceramic
 };
 
 // Who caused a block change. Ids must stay meaningful across restarts:

@@ -4,6 +4,7 @@ Identidade visual, geração procedural e sistemas de mundo de ECOS DE AETHRA. U
 
 - **Protótipo 01** (Prompt Mestre 07 e adendo de vegetação): branch `claude/aethra-visual-worldgen-01`.
 - **Prompt Mestre 08** (FloraGen, campos de flores, perfis, horizonte alcançável, CaveGen e RuinGen): branch `claude/aethra-floragen-cavegen-02`, que parte da anterior.
+- **Mundo em blocos** (o jogo inteiro em blocos de 1 m, com o rio corrigido): branch `claude/aethra-block-world-03`. Agora é o modo padrão; veja [BLOCK_WORLD.md](BLOCK_WORLD.md).
 
 ## Rodar
 
@@ -26,7 +27,7 @@ Opções:
   - `aethra.vw.Quality 0–3` escolhe o perfil (Baixo, Médio, Alto, Ultra; padrão Alto).
   - `aethra.vw.Hide` e `aethra.vw.ShowHorizon` ocultam camadas para depuração (ver HORIZON.md).
 - Os botões de remover e colocar bloco escavam ou preenchem o terreno e a rocha.
-- Sem `-AethraVisualWorld`, o jogo é o mundo voxel de sempre.
+- Sem `-AethraVisualWorld`, o jogo abre o mundo em blocos de Aethra. O mundo voxel original abre com `-AethraClassic`.
 
 Para recriar os materiais (`Content/VisualWorld`), rode `Tools/Editor/create_visualworld_materials.py` pelo commandlet `pythonscript`.
 
@@ -34,6 +35,7 @@ Para recriar os materiais (`Content/VisualWorld`), rode `Tools/Editor/create_vis
 
 | Documento | Conteúdo |
 | --- | --- |
+| [BLOCK_WORLD.md](BLOCK_WORLD.md) | O mundo em blocos: geradores em blocos de 1 m e a correção do rio |
 | [ART_DIRECTION.md](ART_DIRECTION.md) | Referências, identidade e decisões oficiais do Prompt 08 |
 | [MATERIAL_ENGINE.md](MATERIAL_ENGINE.md) | AME e as regras contra aparência de massinha |
 | [WORLDGEN_ARCHITECTURE.md](WORLDGEN_ARCHITECTURE.md) | Gerador, drenagem, biomas e streaming |

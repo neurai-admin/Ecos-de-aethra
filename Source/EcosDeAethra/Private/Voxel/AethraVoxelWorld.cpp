@@ -10,6 +10,7 @@
 #include "Voxel/AethraTerrain.h"
 #include "Voxel/AethraVoxelChunk.h"
 #include "Voxel/AethraWorldSave.h"
+#include "VisualWorld/AethraBlockGen.h"
 
 using namespace AethraTerrain;
 
@@ -55,17 +56,22 @@ void AAethraVoxelWorld::SetStreamingRadius(int32 Radius)
     });
 }
 
+FIntPoint AAethraVoxelWorld::SpawnColumn() const
+{
+    return FAethraBlockGen::IsAethraSeed(Seed) ? FAethraBlockGen::Get(Seed).SpawnPoint() : FIntPoint::ZeroValue;
+}
+
 FVector AAethraVoxelWorld::PrepareSpawn()
 {
     Initialize();
-    const FIntPoint Center(0, 0);
-    LoadChunk(Center, false); // the player spawns on it this frame
+    const FIntPoint Spawn = SpawnColumn();
+    LoadChunk(ChunkAt(FIntVector(Spawn.X, Spawn.Y, 0)), false); // the player spawns on it this frame
     int32 Top = Height - 1;
-    while (Top > 0 && GetBlock(FIntVector(0, 0, Top)) == EAethraBlock::Air)
+    while (Top > 0 && GetBlock(FIntVector(Spawn.X, Spawn.Y, Top)) == EAethraBlock::Air)
     {
         --Top;
     }
-    return FVector(CellSizeCm * 0.5, CellSizeCm * 0.5, (Top + 1) * CellSizeCm + 98.0);
+    return FVector((Spawn.X + 0.5) * CellSizeCm, (Spawn.Y + 0.5) * CellSizeCm, (Top + 1) * CellSizeCm + 98.0);
 }
 
 void AAethraVoxelWorld::Tick(float DeltaSeconds)
