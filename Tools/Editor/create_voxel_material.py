@@ -75,7 +75,7 @@ int id = (int)round(Id * 31.0);
 float3 col = C;
 float rough = 0.86;
 float k = 1.0;
-if (id == 1 && !top && !bottom)                   // grass side: a soft wavy moss lip over soil
+if (id == 1 && abs(N.z) < 0.2)                    // grass side (vertical faces only): a soft wavy moss lip over soil
 {
     float lip = 0.25 + 0.2 * fn.V(float2((w.x + w.y) / 22.0, 3.0), 7); // slopes read green; soil only at the foot of each step
     float moss = smoothstep(lip - 0.05, lip + 0.05, f.z);

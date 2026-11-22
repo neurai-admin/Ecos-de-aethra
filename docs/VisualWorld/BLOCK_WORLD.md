@@ -95,6 +95,16 @@ local antes do entalhe. Agora o rio corre dentro do próprio leito. Os testes de
 - **Copas:** carvalhos e bétulas têm copa maior e mais baixa, em domo. A folhagem tem 4 cartões por folha, maiores e com poucas falhas, então o tronco fica escondido. No horizonte, as florestas voltam a ter volume.
 - **Custo:** benchmark de 60 s com média de 137 FPS e 1% low de 58 FPS. Antes eram 142 e 71: o chunk tem o dobro da altura e a geração de malha passou de cerca de 1,1 ms para 2,2 ms.
 
+## Horizonte suave
+
+- No mundo em blocos, o horizonte não tem mais caixas. Ele é uma superfície contínua: cada canto tem a altura média do chão nas amostras ao redor, as normais são suaves e a cor é misturada.
+- As florestas formam um "cobertor" por cima do chão.
+  - A altura vem da copa média numa janela de 4×4 amostras, vezes a fração dessa janela que é floresta.
+  - Mata densa vira uma massa escura e ondulada; uma árvore isolada quase não aparece, então não há espinhos.
+- As saias entre blocos do horizonte e na borda dos chunks têm a cor e a luz do relevo acima, então as emendas não aparecem.
+- A faixa de terra da lateral da grama só é pintada em faces verticais, e não em encostas do horizonte.
+- O mundo clássico mantém o horizonte em caixas, e o teste dele também.
+
 ## Arte própria (nada do Minecraft)
 
 - **Materiais pintados:** as texturas não têm mais grade de 16×16 pontos. Todo padrão é ruído contínuo nas coordenadas do mundo: pinceladas largas mais grão fino. Tijolos, tábuas e telhas têm juntas suaves.
