@@ -6,7 +6,7 @@
 namespace AethraTerrain
 {
     inline constexpr int32 ChunkSize = 16;
-    inline constexpr int32 Height = 128; // 64 until Marco 02; dense index and saved cells are unaffected
+    inline constexpr int32 Height = 256; // 64 until Marco 02, 128 until the Aethra mountains; dense index and saved cells are unaffected
     inline constexpr int32 CellCount = ChunkSize * ChunkSize * Height;
     inline constexpr int32 HorizontalLimit = 16384;
     inline constexpr double CellSizeCm = 100.0;

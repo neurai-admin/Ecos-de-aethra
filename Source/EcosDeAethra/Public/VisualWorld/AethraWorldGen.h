@@ -63,6 +63,9 @@ public:
     float BaseHeight(FVector2D P) const;
     // Everything at a point, with rivers carved, lakes/sea filled and pads flattened.
     FWorldSample Sample(FVector2D P) const;
+    // Metres to the nearest river anywhere in the domain (smooth; unlike FWorldSample::WaterDistance,
+    // which is only meaningful next to a channel). For generators that keep relief away from water.
+    float WaterProximity(FVector2D P) const;
     // Height only (cheaper than Sample when water and biome are not needed).
     float Height(FVector2D P) const { return Sample(P).Height; }
 

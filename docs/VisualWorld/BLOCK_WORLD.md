@@ -78,6 +78,23 @@ local antes do entalhe. Agora o rio corre dentro do próprio leito. Os testes de
   - `-AethraNoMenu` pula o menu. O benchmark e as capturas automáticas também pulam.
 - **Interface:** fontes entalhadas próprias, cinto com cantos cortados e moldura dourada, menu em painéis entalhados. Nada da interface vem do Minecraft.
 
+## Montanhas e florestas
+
+- **Altura:** a coluna tem 256 blocos (antes, 128). O mundo clássico mantém o teto de 120: o checksum de 4096 colunas da seed 42819 continua `0xdbc636bf` nos 128 blocos de baixo, e acima deles só há ar.
+- **Cordilheiras:** o mundo em blocos ergue montanhas próprias sobre o terreno do WorldGen.
+  - Cristas de ruído "ridged" sobem até cerca de 200 blocos, em faixas de cordilheira com cerca de 1 km.
+  - Colinas onduladas cobrem o resto, então não há planícies lisas.
+  - Os rios ficam em vales: o relevo cresce entre 5 e 45 m da água, e a costa fica baixa. A distância ao rio vem de `FAethraWorldGen::WaterProximity`, um campo de distância suave em todo o domínio.
+- **Superfície:** encostas íngremes são rocha nua; acima de cerca de 150 há neve; logo abaixo, campo alto com cascalho.
+- **Escalar:** o terreno sobe em degraus de 1 bloco, que se sobem pulando. Penhascos íngremes exigem cavar ou colocar blocos.
+- **Florestas:**
+  - vêm em manchas grandes e cobrem a maior parte das encostas das montanhas;
+  - pinheiros em cone alto e denso nas montanhas e acima de 70 blocos;
+  - carvalhos e bétulas abaixo disso;
+  - não há árvores acima de 165 blocos, na neve nem na rocha.
+- **Copas:** carvalhos e bétulas têm copa maior e mais baixa, em domo. A folhagem tem 4 cartões por folha, maiores e com poucas falhas, então o tronco fica escondido. No horizonte, as florestas voltam a ter volume.
+- **Custo:** benchmark de 60 s com média de 137 FPS e 1% low de 58 FPS. Antes eram 142 e 71: o chunk tem o dobro da altura e a geração de malha passou de cerca de 1,1 ms para 2,2 ms.
+
 ## Arte própria (nada do Minecraft)
 
 - **Materiais pintados:** as texturas não têm mais grade de 16×16 pontos. Todo padrão é ruído contínuo nas coordenadas do mundo: pinceladas largas mais grão fino. Tijolos, tábuas e telhas têm juntas suaves.

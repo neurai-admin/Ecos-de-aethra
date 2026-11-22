@@ -22,6 +22,48 @@ uint32 BlockHash(int32 X, int32 Y, int32 Seed, uint32 Salt)
     return V ^ (V >> 16);
 }
 
+float BlockValue(int32 Seed, double X, double Y, uint32 Salt)
+{
+    const int32 X0 = FMath::FloorToInt(X), Y0 = FMath::FloorToInt(Y);
+    float FX = static_cast<float>(X - X0), FY = static_cast<float>(Y - Y0);
+    FX = FX * FX * (3.f - 2.f * FX);
+    FY = FY * FY * (3.f - 2.f * FY);
+    const auto At = [&](int32 I, int32 J) { return (BlockHash(X0 + I, Y0 + J, Seed, Salt) & 0xFFFF) / 65535.f; };
+    return FMath::Lerp(FMath::Lerp(At(0, 0), At(1, 0), FX), FMath::Lerp(At(0, 1), At(1, 1), FX), FY);
+}
+
+float BlockFbm(int32 Seed, double X, double Y, int32 Octaves, uint32 Salt)
+{
+    float Sum = 0.f, Amp = 1.f, Norm = 0.f;
+    for (int32 O = 0; O < Octaves; ++O)
+    {
+        Sum += Amp * BlockValue(Seed, X, Y, Salt + O * 7919u);
+        Norm += Amp;
+        Amp *= .5f;
+        X = X * 2.03 + 17.1;
+        Y = Y * 2.03 - 9.7;
+    }
+    return Sum / Norm;
+}
+
+// Ridged noise 0..1: sharp crests and long spurs, the shape of real ranges.
+float BlockRidged(int32 Seed, double X, double Y, int32 Octaves, uint32 Salt)
+{
+    float Sum = 0.f, Amp = 1.f, Norm = 0.f, Weight = 1.f;
+    for (int32 O = 0; O < Octaves; ++O)
+    {
+        const float R = 1.f - FMath::Abs(2.f * BlockValue(Seed, X, Y, Salt + O * 7919u) - 1.f);
+        const float V = R * R * Weight;
+        Weight = FMath::Clamp(V * 1.6f, 0.f, 1.f);
+        Sum += Amp * V;
+        Norm += Amp;
+        Amp *= .5f;
+        X = X * 2.07 + 3.3;
+        Y = Y * 2.07 + 11.9;
+    }
+    return Sum / Norm;
+}
+
 EB BlockForSurface(EAmeSurface S)
 {
     switch (S)
@@ -95,9 +137,9 @@ EB BlockTree(const FFloraTree& T, int32 DX, int32 DY, int32 DZ)
         {
             return EB::Wood;
         }
-        const int32 L = DZ - Trunk + 1; // crown layers 0..3: a dome
-        const int32 Radius2[] = { 5, 8, 5, 2 };
-        return L >= 0 && L < 4 && D2 <= Radius2[L] ? EB::Leaves : EB::Air;
+        const int32 L = DZ - Trunk + 2; // crown layers 0..4: a full dome reaching down around the trunk
+        const int32 Radius2[] = { 5, 10, 13, 10, 4 };
+        return L >= 0 && L < 5 && D2 <= Radius2[L] ? EB::Leaves : EB::Air;
     }
     case EFloraSpecies::Birch:
     {
@@ -106,20 +148,25 @@ EB BlockTree(const FFloraTree& T, int32 DX, int32 DY, int32 DZ)
         {
             return EB::BirchWood;
         }
-        const int32 L = DZ - Trunk + 2;
-        const int32 Radius2[] = { 2, 2, 1, 0 };
-        return L >= 0 && L < 4 && D2 <= Radius2[L] ? EB::BirchLeaves : EB::Air;
+        const int32 L = DZ - Trunk + 3;
+        const int32 Radius2[] = { 2, 5, 5, 2, 1 };
+        return L >= 0 && L < 5 && D2 <= Radius2[L] ? EB::BirchLeaves : EB::Air;
     }
     case EFloraSpecies::Pine:
     {
-        const int32 Trunk = 7 + Extra;
+        // A tall layered cone, dense from near the ground to the tip (the trunk hides inside it).
+        const int32 Trunk = 10 + Extra * 2;
+        const int32 Tip = Trunk + 2;
         if (Cheb == 0 && DZ <= Trunk)
         {
             return EB::Wood;
         }
-        static constexpr int32 Crown[] = { 2, 1, 2, 1, 1, 0, 0 };
-        const int32 L = DZ - 3;
-        return L >= 0 && L < 7 && AX + AY <= Crown[L] && DZ <= Trunk + 2 ? EB::PineLeaves : EB::Air;
+        if (DZ < 2 || DZ > Tip)
+        {
+            return EB::Air;
+        }
+        const float Rad = FMath::Min((Tip - DZ) * .3f + (DZ % 2 ? .7f : 0.f), 3.6f);
+        return D2 <= Rad * Rad + .3f ? EB::PineLeaves : EB::Air;
     }
     case EFloraSpecies::Bush:
         return (DZ == 1 && D2 <= 1) || (DZ == 2 && Cheb == 0) ? EB::Leaves : EB::Air;
@@ -382,6 +429,41 @@ FAethraBlockGen::FColumnInfo FAethraBlockGen::ComputeColumn(FIntPoint P) const
     C.Rock = BlockForSurface(FAmeSelector::RockSurface(S.Rock));
     C.Subsoil = BlockIsRock(C.Surface) ? C.Surface : C.Surface == EB::Sand || C.Surface == EB::Gravel ? C.Surface : EB::Dirt;
     C.Ground = FMath::Clamp(FMath::FloorToInt(MapHeight(S.Height)), 2, ColumnHeight - 8);
+    if (!S.IsWater())
+    {
+        // Mountain ranges: their own relief on top of the WorldGen land; steep faces are bare rock, the
+        // peaks snow, the slopes below the tree line pine forest (Tree).
+        float Range = 0.f;
+        const float Up = Relief(M, S.Height, Range);
+        C.Mountain = Range;
+        if (Up > .5f)
+        {
+            float RX = 0.f, RY = 0.f;
+            const float Dx = Relief(M + FVector2D(1, 0), S.Height, RX) - Up, Dy = Relief(M + FVector2D(0, 1), S.Height, RY) - Up;
+            const float Steep = FMath::Max(FMath::Abs(Dx), FMath::Abs(Dy));
+            C.Ground = FMath::Clamp(C.Ground + FMath::FloorToInt(Up), 2, ColumnHeight - 8);
+            const float Snow = 150.f + 14.f * BlockFbm(Gen->GetSeed(), M.X / 60.0, M.Y / 60.0, 2, 0x64);
+            if (Steep > 1.3f)
+            {
+                C.Surface = C.Ground > Snow + 10.f ? EB::Snow : BlockIsRock(C.Rock) ? C.Rock : EB::Stone;
+                C.Subsoil = C.Surface == EB::Snow ? C.Rock : C.Surface;
+            }
+            else if (C.Ground > Snow)
+            {
+                C.Surface = EB::Snow;
+                C.Subsoil = C.Rock;
+            }
+            else if (C.Ground > Snow - 25.f)
+            {
+                C.Surface = (BlockHash(P.X, P.Y, Gen->GetSeed(), 0x65) & 3) ? EB::Grass : EB::Gravel; // high meadow, scree
+            }
+            else if (C.Surface == EB::Sand)
+            {
+                C.Surface = EB::Grass;
+                C.Subsoil = EB::Dirt;
+            }
+        }
+    }
     // Near water, the ground stays below the continuous water surface, so the smooth sheet meets the
     // banks without a stepped shoreline.
     const float Shore = S.ShoreLevel > -1e8f ? S.ShoreLevel : S.IsWater() ? S.WaterLevel : -1e9f;
@@ -406,6 +488,19 @@ FAethraBlockGen::FColumnInfo FAethraBlockGen::ComputeColumn(FIntPoint P) const
         C.Subsoil = C.Surface == EB::Mud ? EB::Dirt : C.Surface;
     }
     return C;
+}
+
+float FAethraBlockGen::Relief(const FVector2D& M, float LandMetres, float& OutRange) const
+{
+    const int32 Sd = Gen->GetSeed();
+    const float Water = Gen->WaterProximity(M);
+    const float Valley = FMath::SmoothStep(5.f, 45.f, Water);    // rivers keep narrow valleys between slopes
+    const float Coast = FMath::SmoothStep(1.f, 20.f, LandMetres); // and the coast stays low
+    const float Range = FMath::SmoothStep(.36f, .56f, BlockFbm(Sd, M.X / 900.0, M.Y / 900.0, 3, 0x61));
+    const float Peaks = BlockRidged(Sd, M.X / 280.0, M.Y / 280.0, 5, 0x62);
+    const float Hills = BlockRidged(Sd, M.X / 110.0, M.Y / 110.0, 3, 0x63); // rolling ridges everywhere: no flat plains
+    OutRange = Range * Valley * Coast;
+    return (Range * (24.f + 175.f * Peaks * Peaks) + 26.f * Hills * FMath::SmoothStep(5.f, 30.f, Water)) * Valley * Coast;
 }
 
 FAethraBlockGen::FColumnInfo FAethraBlockGen::Column(FIntPoint P) const
@@ -438,8 +533,34 @@ TOptional<FFloraTree> FAethraBlockGen::Tree(FIntPoint Cell) const
     }
     TOptional<FFloraTree> Result;
     FFloraTree T;
-    if (FFloraPlacer::TreeAt(*Gen, Cell, T) && !RuinGen->SurfaceSiteAt(T.Position) && !CaveGen->NearEntrance(T.Position, 6.0))
+    const bool bFlora = FFloraPlacer::TreeAt(*Gen, Cell, T);
+    if (!bFlora)
     {
+        // Mountain forests: a pine in most cells of a range's slopes.
+        const uint32 H = BlockHash(Cell.X, Cell.Y, Gen->GetSeed(), 0x66);
+        T.Position = FVector2D(Cell.X * 7.0 + 1.0 + (H & 0xFF) / 255.0 * 5.0, Cell.Y * 7.0 + 1.0 + ((H >> 8) & 0xFF) / 255.0 * 5.0);
+        T.Species = EFloraSpecies::Pine;
+        T.Variant = (H >> 16) % 3;
+        T.Scale = .85f + ((H >> 20) & 0xFF) / 255.f * .45f;
+        T.Id = FFloraPlacer::MakeId(Cell, T.Species);
+    }
+    const FColumnInfo Base = Column(FIntPoint(FMath::FloorToInt(T.Position.X), FMath::FloorToInt(T.Position.Y)));
+    // Forests come in large patches (and cover most mountain slopes), not one tree here and there.
+    const float Forest = BlockFbm(Gen->GetSeed(), T.Position.X / 420.0, T.Position.Y / 420.0, 3, 0x68);
+    const float Cover = FMath::Max(Base.Mountain > .2f ? .8f : 0.f, FMath::SmoothStep(.42f, .58f, Forest) * .85f);
+    const bool bMountainPine = !bFlora && (BlockHash(Cell.X, Cell.Y, Gen->GetSeed(), 0x67) & 0xFF) < Cover * 255.f;
+    const bool bBelowTreeLine = Base.Ground < 165 && Base.Surface != EB::Snow && !BlockIsRock(Base.Surface);
+    if ((bFlora || bMountainPine) && bBelowTreeLine && !RuinGen->SurfaceSiteAt(T.Position) && !CaveGen->NearEntrance(T.Position, 6.0))
+    {
+        if (Base.Mountain > .35f || Base.Ground > 70)
+        {
+            T.Species = EFloraSpecies::Pine; // conifers up the slopes
+        }
+        else if (!bFlora)
+        {
+            const uint32 Pick = BlockHash(Cell.X, Cell.Y, Gen->GetSeed(), 0x69) % 10;
+            T.Species = Pick < 5 ? EFloraSpecies::Oak : Pick < 8 ? EFloraSpecies::Birch : EFloraSpecies::Pine;
+        }
         Result = T;
     }
     FWriteScopeLock Write(CacheLock);
@@ -621,7 +742,7 @@ void FAethraBlockGen::GenerateColumn(FIntPoint P, TStaticArray<EAethraBlock, Col
             {
                 continue;
             }
-            for (int32 DZ = 1; DZ <= 16 && Base.Ground + DZ < ColumnHeight; ++DZ)
+            for (int32 DZ = 1; DZ <= 20 && Base.Ground + DZ < ColumnHeight; ++DZ)
             {
                 const EB Block = BlockTree(*T, DX, DY, DZ);
                 const int32 Z = Base.Ground + DZ;

@@ -257,7 +257,7 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
     };
 
     // Leaves: the leaf blocks keep their cube faces as invisible collision (section 2: digging and
-    // standing on canopies as before); what is seen is foliage clusters (section 4), three cards per
+    // standing on canopies as before); what is seen is foliage clusters (section 4), four cards per
     // exposed leaf block in random orientations, larger than the block so the crown reads round.
     TArray<FVector> CardVertices, CardNormals;
     TArray<int32> CardTriangles;
@@ -278,12 +278,12 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
         uint32 State = GetTypeHash(Cell) * 2246822519u + 3u;
         FLinearColor Color = AethraBlockColor(Block, Cell, FIntVector(0, 0, 1));
         const FVector Centre = (FVector(Local) + FVector(0.5)) * CellSizeCm + FVector(Rand(State) - 0.5f, Rand(State) - 0.5f, Rand(State) - 0.5f) * 30.0;
-        for (int32 Card = 0; Card < 3; ++Card)
+        for (int32 Card = 0; Card < 4; ++Card)
         {
             const FRotator Turn(Rand(State) * 360.0f, Rand(State) * 360.0f, Rand(State) * 360.0f);
             const FVector U = Turn.RotateVector(FVector::ForwardVector);
             const FVector V = Turn.RotateVector(FVector::RightVector);
-            const double Half = (0.8 + Rand(State) * 0.25) * CellSizeCm;
+            const double Half = (0.9 + Rand(State) * 0.3) * CellSizeCm;
             const int32 Start = CardVertices.Num();
             CardVertices.Append({ Centre - U * Half - V * Half, Centre + U * Half - V * Half, Centre + U * Half + V * Half, Centre - U * Half + V * Half });
             CardUV.Append({ {0, 0}, {1, 0}, {1, 1}, {0, 1} });

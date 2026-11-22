@@ -468,6 +468,13 @@ float FAethraWorldGen::Bilinear(const TArray<float>& Field, FVector2D P) const
     return FMath::Lerp(FMath::Lerp(Field[I], Field[I + 1], FX), FMath::Lerp(Field[I + Nodes], Field[I + Nodes + 1], FX), FY);
 }
 
+float FAethraWorldGen::WaterProximity(FVector2D P) const
+{
+    // Rivers only: lakes may sit in basins between mountains (their shores follow the lake level).
+    const FVector2D R = RiverLookup(P);
+    return FMath::Max(0.f, Bilinear(RiverDist, R) - .5f * Bilinear(RiverWidth, R));
+}
+
 FWorldSample FAethraWorldGen::Sample(FVector2D P) const
 {
     FWorldSample S;

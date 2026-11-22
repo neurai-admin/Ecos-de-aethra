@@ -77,7 +77,7 @@ float rough = 0.86;
 float k = 1.0;
 if (id == 1 && !top && !bottom)                   // grass side: a soft wavy moss lip over soil
 {
-    float lip = 0.80 + 0.10 * fn.V(float2((w.x + w.y) / 22.0, 3.0), 7);
+    float lip = 0.25 + 0.2 * fn.V(float2((w.x + w.y) / 22.0, 3.0), 7); // slopes read green; soil only at the foot of each step
     float moss = smoothstep(lip - 0.05, lip + 0.05, f.z);
     col = lerp(col * DIRT_RATIO, col, moss);
     if (moss < 0.5) id = 2;
@@ -152,7 +152,7 @@ float ang = atan2(q.y, q.x);
 float lobes = 0.8 + 0.12 * sin(ang * 5.0 + S * 40.0) + 0.07 * sin(ang * 11.0 + S * 17.0);
 float leaf = fn.V(UV * 9.0 + S * 31.0, 4);
 float far = saturate((D - 3500.0) / 2500.0);       // far away: no small gaps (no shimmer)
-float opacity = (r < lobes && (leaf > 0.24 || far > 0.5)) ? 1.0 : 0.0;
+float opacity = (r < lobes && (leaf > 0.12 || far > 0.5)) ? 1.0 : 0.0; // dense: few gaps, trunks stay hidden
 float hue = fn.V(P.xy / 2200.0, 11);
 float3 drift = lerp(float3(0.90, 1.0, 0.82), float3(1.12, 1.02, 0.86), hue);
 float k = (0.72 + 0.4 * fn.V(UV * 4.0 + S * 13.0, 6)) * (1.05 - 0.3 * r);

@@ -346,9 +346,19 @@ bool FAethraVW05::RunTest(const FString&)
         for (int32 X = -32; X < 32; ++X)
         {
             AethraTerrain::GenerateColumn(FIntPoint(X * 7, Y * 5), 42819, Column);
-            for (int32 Z = 0; Z < AethraTerrain::Height; ++Z)
+            // The checksum was recorded with 128-block columns; the column is taller now (the block
+            // world's mountains), so the original 128 blocks are hashed and everything above must be air.
+            for (int32 Z = 0; Z < 128; ++Z)
             {
                 Checksum = HashCombine(Checksum, static_cast<uint32>(Column[Z]) + Z * 131u);
+            }
+            for (int32 Z = 128; Z < AethraTerrain::Height; ++Z)
+            {
+                if (Column[Z] != EAethraBlock::Air)
+                {
+                    AddError(TEXT("The original voxel world has blocks above its 128-block ceiling"));
+                    return false;
+                }
             }
         }
     }

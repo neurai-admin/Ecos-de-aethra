@@ -5,8 +5,9 @@
 // served by this generator; every other seed keeps the original voxel generator, so existing worlds
 // and saves keep their meaning, and the block world saves under its own (flagged) seed.
 //
-// Heights: 1 block = 1 m up to 40 m above the sea, then compressed (hills x0.28, mountains x0.045)
-// so the whole relief fits the 128-block column; sea level is block 12.
+// Heights: 1 block = 1 m up to 40 m above the sea, then compressed (hills x0.28, mountains x0.045);
+// sea level is block 12. On top of that the block world raises its own mountain ranges (ridged crests up
+// to ~200 blocks) away from the rivers, which stay in their valleys; the column is 256 blocks.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -25,7 +26,7 @@ class ECOSDEAETHRA_API FAethraBlockGen
 public:
     static constexpr int32 SeedFlag = 0x40000000;
     static constexpr int32 SeaLevel = 12;
-    static constexpr int32 ColumnHeight = 128; // AethraTerrain::Height
+    static constexpr int32 ColumnHeight = 256; // AethraTerrain::Height
 
     static bool IsAethraSeed(int32 Seed) { return Seed > 0 && (Seed & SeedFlag) != 0; }
     static int32 MakeSeed(int32 WorldSeed) { return SeedFlag | (WorldSeed & (SeedFlag - 1)); }
@@ -62,6 +63,7 @@ private:
         int32 Ground = 0;   // top solid block
         int32 WaterTop = -1; // top water block, -1 = none
         float Plane = -1e9f; // water surface nearby, in blocks (fractional); also on dry banks
+        float Mountain = 0.f; // 0 lowland .. 1 inside a mountain range (pine forests, rock, snow)
         EAethraBlock Surface = EAethraBlock::Grass;
         EAethraBlock Subsoil = EAethraBlock::Dirt;
         EAethraBlock Rock = EAethraBlock::Stone;
@@ -80,6 +82,8 @@ private:
     mutable TMap<FIntPoint, TOptional<FFloraTree>> TreeCache;
 
     FColumnInfo Column(FIntPoint Point) const;
+    // Mountain relief in blocks at M (metres), and how much of a range it is (0..1).
+    float Relief(const FVector2D& M, float LandMetres, float& OutRange) const;
     FColumnInfo ComputeColumn(FIntPoint Point) const;
     TOptional<FFloraTree> Tree(FIntPoint Cell) const;
     void Rasterise(const FRuinSite& Site);

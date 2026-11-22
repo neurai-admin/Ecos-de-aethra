@@ -169,7 +169,7 @@ namespace AethraTerrain
         const int32 Hills = Noise(Point, Seed, 32, 11, 0x9DE1);
         const int32 Detail = Noise(Point, Seed, 9, 3, 0x319F);
         // Near the origin the mountain term is 0 and the sum stays within the Marco 01 range (8..56).
-        return FMath::Clamp(21 + Rise + Hills + Detail + MountainAt(Point, Seed), 8, Height - 8);
+        return FMath::Clamp(21 + Rise + Hills + Detail + MountainAt(Point, Seed), 8, 120); // the original world keeps its 128-block ceiling
     }
 
     void GenerateColumn(FIntPoint Point, int32 Seed, TStaticArray<EAethraBlock, Height>& Column)

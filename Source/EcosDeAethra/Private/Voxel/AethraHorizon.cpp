@@ -69,10 +69,10 @@ AAethraHorizon::FMeshData AAethraHorizon::BuildTile(int32 Seed, FIntPoint Tile, 
         {
             GenerateColumn(Base + FIntPoint(I, J) * Step, Seed, Column);
             int32 Top = Height - 1;
-            // Block world: far trees are not boxes on the horizon; a canopy only tints the ground below.
+            // Block world: forests keep their canopy height (a forest mass on the far slopes); bare trunks do not.
             bool bCanopy = false;
             while (Top >= 0 && (!IsSurface(Column[Top]) // plants are too small for the horizon
-                || (bBlockWorld && (IsLeaves(Column[Top]) || Column[Top] == EAethraBlock::Wood || Column[Top] == EAethraBlock::BirchWood))))
+                || (bBlockWorld && (Column[Top] == EAethraBlock::Wood || Column[Top] == EAethraBlock::BirchWood))))
             {
                 bCanopy |= IsLeaves(Column[Top]);
                 --Top;
