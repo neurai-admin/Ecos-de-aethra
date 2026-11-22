@@ -62,8 +62,10 @@ bool bottom = N.z < -0.5;
 float2 uv = an.z > 0.5 ? f.xy : (an.x > 0.5 ? f.yz : f.xz); // on sides uv.y is the height
 int2 t = (int2)floor(uv * 16.0);
 int face = an.z > 0.5 ? (top ? 0 : 1) : (an.x > 0.5 ? 2 : 3);
-int3 key = int3(t, face) + cell * 37;
-float g = fn.H(key);                              // texel grain 0..1
+// World-aligned texels: the grain runs across block borders, so the ground reads as one surface.
+float2 w = an.z > 0.5 ? inside.xy : (an.x > 0.5 ? inside.yz : inside.xz);
+int2 tw = (int2)floor(w * 0.16);
+float g = fn.H(int3(tw, face));                   // texel grain 0..1
 float hue = fn.V(P.xy / 2200.0, 11);              // ~20 m patches of warmer / cooler vegetation
 float3 drift = lerp(float3(0.90, 1.0, 0.82), float3(1.12, 1.02, 0.86), hue);
 """
@@ -79,16 +81,16 @@ if (id == 1 && !top && !bottom)                   // grass side: ragged green fr
     if (15 - t.y >= fringe) { col *= DIRT_RATIO; id = 2; }
 }
 if (id == 1)      { k = 0.82 + 0.30 * g; if (top && g > 0.93) k *= 1.15; col *= drift; }
-else if (id == 2) { float clump = fn.H(int3(t / 2, face) + cell * 37); k = 0.78 + 0.22 * clump + 0.12 * g; if (g > 0.95) k = 1.25; }
+else if (id == 2) { float clump = fn.H(int3(tw / 2, face + 4)); k = 0.78 + 0.22 * clump + 0.12 * g; if (g > 0.95) k = 1.25; }
 else if (id == 3 || (id >= 17 && id <= 21))      // stone and the WorldGen rocks: flat slabs, lighter patches, dark seams
 {
-    float v = fn.V(uv * 4.0 + float2(cell.xy) * 4.0 + face * 13.0, 3);
+    float v = fn.V(w / 25.0 + face * 13.0, 3);
     k = 0.86 + 0.12 * g;
     if (v > 0.62) k += 0.16;
     if (abs(v - 0.62) < 0.035) k -= 0.28;
     rough = 0.74;
 }
-else if (id == 4) { k = 0.93 + 0.10 * g; if (top) k *= 0.97 + 0.04 * sin(uv.y * 25.0 + uv.x * 6.0); rough = 0.92; }
+else if (id == 4) { k = 0.93 + 0.10 * g; if (top) k *= 0.97 + 0.04 * sin(w.y * 0.25 + w.x * 0.06); rough = 0.92; }
 else if (id == 5 || id == 13)                     // oak / birch: rings on cut faces, bark on sides
 {
     if (top || bottom)
@@ -103,9 +105,9 @@ else if (id == 5 || id == 13)                     // oak / birch: rings on cut f
 else if (id == 6 || id == 7 || id == 14) { k = 0.70 + 0.45 * g; col *= drift; } // leaves seen on the horizon
 else if (id == 11) { k = 0.95 + 0.05 * g; rough = 0.55; }
 else if (id == 12) { k = 0.95 + 0.06 * g; rough = 0.08; }
-else if (id == 15) { float peb = fn.H(int3(t / 3, face) + cell * 37); k = 0.70 + 0.45 * peb + 0.08 * g; if ((t.x + t.y) % 3 == 0 && g > 0.7) k *= 0.6; } // gravel: pebbles
-else if (id == 16) { k = 0.85 + 0.18 * fn.V(uv * 3.0 + float2(cell.xy) * 3.0, 5) + 0.06 * g; rough = 0.6; }   // mud: wet, smooth
-else if (id == 22) { float v = fn.V(uv * 3.0 + float2(cell.xy) * 3.0 + face * 7.0, 9); k = 0.97 + 0.04 * g; if (abs(v - 0.5) < 0.03) k = 0.70; rough = 0.45; } // marble: veins
+else if (id == 15) { float peb = fn.H(int3(tw / 3, face + 4)); k = 0.70 + 0.45 * peb + 0.08 * g; if ((t.x + t.y) % 3 == 0 && g > 0.7) k *= 0.6; } // gravel: pebbles
+else if (id == 16) { k = 0.85 + 0.18 * fn.V(w / 33.0, 5) + 0.06 * g; rough = 0.6; }   // mud: wet, smooth
+else if (id == 22) { float v = fn.V(w / 33.0 + face * 7.0, 9); k = 0.97 + 0.04 * g; if (abs(v - 0.5) < 0.03) k = 0.70; rough = 0.45; } // marble: veins
 else if (id == 23)                                // stone bricks: 2 courses, offset joints
 {
     int row = t.y / 8; int jx = (t.x + (row % 2) * 4) % 8;
@@ -116,9 +118,7 @@ else if (id == 24) { k = (t.y % 4 == 0 ? 0.68 : 0.92 + 0.10 * g) * (0.9 + 0.15 *
 else if (id == 25) { k = (t.y % 4 == 3 ? 0.66 : 0.95 + 0.06 * g) * ((t.x + (t.y / 4) * 2) % 4 == 0 ? 0.85 : 1.0); rough = 0.7; } // roof tiles
 else if (id == 26) { float facet = fn.H(int3(t / 4, face) + cell * 37); k = 0.85 + 0.55 * facet; rough = 0.15; } // Aetherite crystal
 else if (id == 31) { k = 0.94 + 0.06 * g; if (t.y % 8 == 4) k = 0.78; rough = 0.5; } // ceramic
-float3 e = min(f, 1.0 - f) + an;                  // soft bevel at block edges
-float bevel = lerp(0.82, 1.0, smoothstep(0.0, 0.045, min(e.x, min(e.y, e.z))));
-k = lerp(k * bevel, 1.0, saturate((D - 3000.0) / 9000.0));
+k = lerp(k, 1.0, saturate((D - 3000.0) / 9000.0)); // no edge bevel: blocks join into one continuous surface
 return float4(col * k, rough);
 """.replace("DIRT_RATIO", DIRT_RATIO)
 
@@ -160,15 +160,28 @@ return float4(rgb, stem || petal ? 1.0 : 0.0);
 """
 
 WATER_NORMAL_CODE = r"""
-float2 p = P.xy;
+bool flowing = C.b >= 0.5;                        // block world: RG flow direction, B speed
+float2 dir = flowing ? C.rg * 2.0 - 1.0 : float2(0.0, 0.0);
+float speed = flowing ? (C.b - 0.5) * 2.0 : 0.0;
+float2 p = P.xy - dir * T * (30.0 + 170.0 * speed); // the ripples travel downstream
 float2 d1 = float2(0.8, 0.6), d2 = float2(-0.5, 0.86), d3 = float2(0.2, -0.98);
 float2 g = d1 * 0.10 * cos(dot(p, d1) * 0.012 + T * 1.1)
          + d2 * 0.07 * cos(dot(p, d2) * 0.021 + T * 1.6)
          + d3 * 0.05 * cos(dot(p, d3) * 0.047 + T * 2.3);
+float2 side = float2(-dir.y, dir.x);              // current streaks along the flow
+float along = dot(p, dir), across = dot(p, side);
+g += side * (0.05 * speed) * cos(across * 0.11 + 2.0 * sin(along * 0.004));
 return normalize(float3(-g, 1.0));
 """
 
 WATER_COLOUR_CODE = r"""
+if (C.b >= 0.5)                                   // block world: one continuous river sheet
+{
+    float deep = saturate(Depth / 300.0);
+    float3 river = lerp(float3(0.05, 0.19, 0.18), float3(0.01, 0.06, 0.10), deep);
+    // Opaque enough that the block bed never shows its steps; the shoreline fades with the vertex alpha.
+    return float4(river, lerp(0.82, 0.95, deep) * Edge);
+}
 float depth = saturate(Depth / 450.0);
 float3 colour = lerp(float3(0.10, 0.32, 0.30), float3(0.02, 0.09, 0.16), depth);
 float opacity = lerp(0.25, 0.88, depth) * saturate(Depth / 30.0); // soft shoreline
@@ -298,8 +311,9 @@ pixel = node(m, unreal.MaterialExpressionPixelDepth)
 behind = node(m, unreal.MaterialExpressionSubtract)
 mel.connect_material_expressions(scene, "", behind, "A")
 mel.connect_material_expressions(pixel, "", behind, "B")
-normal = custom(m, WATER_NORMAL_CODE, F3, "AethraWaves", [("P", wp, ""), ("T", time, "")])
-colour = custom(m, WATER_COLOUR_CODE, F4, "AethraWaterColour", [("Depth", behind, "")])
+vc = node(m, unreal.MaterialExpressionVertexColor)
+normal = custom(m, WATER_NORMAL_CODE, F3, "AethraWaves", [("P", wp, ""), ("T", time, ""), ("C", vc, "")])
+colour = custom(m, WATER_COLOUR_CODE, F4, "AethraWaterColour", [("Depth", behind, ""), ("C", vc, ""), ("Edge", vc, "A")])
 mel.connect_material_property(normal, "", MP.MP_NORMAL)
 mel.connect_material_property(mask(m, colour, "rgb"), "", MP.MP_BASE_COLOR)
 mel.connect_material_property(mask(m, colour, "a"), "", MP.MP_OPACITY)

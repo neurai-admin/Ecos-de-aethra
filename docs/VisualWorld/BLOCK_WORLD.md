@@ -52,6 +52,16 @@ A correção fica em `FAethraWorldGen::Sample`: a superfície do rio nunca passa
 local antes do entalhe. Agora o rio corre dentro do próprio leito. Os testes de rio do Visual World
 (continuidade, água doce e salgada, profundidade) continuam passando.
 
+## Rio contínuo e blocos sem borda
+
+- No mundo em blocos, a água não é desenhada em cubos. Cada chunk recebe uma superfície contínua no nível real da água (`FAethraBlockGen::BuildWaterSurface`).
+  - A margem é suave: a opacidade cai com a distância até a água.
+  - O fluxo vai na cor do vértice: RG é a direção e B a velocidade. As ondas e correntezas andam rio abaixo.
+  - Os blocos de água continuam nos dados (cavar, colocar, LIS); só não são desenhados.
+- As margens são de grama e sobem um bloco a cada 1,5 m. Até 3 m da água, o chão fica logo abaixo da superfície, então a água encontra a margem sem degrau.
+- `FWorldSample::ShoreLevel` dá o nível da água próxima também em terra seca. É um campo novo; nada que já existia mudou de valor.
+- Os blocos não têm mais chanfro nem variação de cor por bloco. A granulação do material segue as coordenadas do mundo e atravessa as bordas, então chão vizinho lê como uma superfície só. Tijolos, tábuas e troncos mantêm o desenho por bloco.
+
 ## Blocos novos
 
 Os ids são anexados depois de `BirchLeaves`, porque saves guardam os valores numéricos. Eles param em 31,

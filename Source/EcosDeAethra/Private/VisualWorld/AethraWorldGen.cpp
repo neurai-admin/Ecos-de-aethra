@@ -504,6 +504,10 @@ FWorldSample FAethraWorldGen::Sample(FVector2D P) const
             {
                 H = Limit;
             }
+            if (D < Half + 3.f)
+            {
+                S.ShoreLevel = Level;
+            }
             if (D < Half + .5f)
             {
                 S.WaterLevel = Level;
@@ -516,7 +520,7 @@ FWorldSample FAethraWorldGen::Sample(FVector2D P) const
         // Lakes: the shore is the 0.5 contour of the interpolated lake mask (round, following the
         // ground), not the nearest node's 16 m square; the bed deepens toward the middle.
         const float Mask = Bilinear(LakeMask, R);
-        if (Mask > .5f)
+        if (Mask > .3f)
         {
             int32 Lake = -1;
             for (int32 K = 0; K < 4 && Lake < 0; ++K)
@@ -526,12 +530,20 @@ FWorldSample FAethraWorldGen::Sample(FVector2D P) const
             }
             if (Lake >= 0)
             {
+                S.ShoreLevel = Filled[Lake];
+            }
+            if (Lake >= 0 && Mask > .5f)
+            {
                 S.WaterLevel = Filled[Lake];
                 S.WaterBody = LakeBody[Lake];
                 H = FMath::Min(H, Filled[Lake] - 3.f * (Mask - .5f));
                 WaterDist = 0.f;
             }
         }
+    }
+    if (H < 2.f && S.ShoreLevel < -1e8f && (S.WaterBody < 0 || S.WaterBody == SeaBody || !bInDomain))
+    {
+        S.ShoreLevel = 0.f;
     }
     if (H < .3f && (S.WaterBody < 0 || S.WaterBody == SeaBody || !bInDomain))
     {

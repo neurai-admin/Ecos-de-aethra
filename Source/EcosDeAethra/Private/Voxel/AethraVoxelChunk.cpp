@@ -5,6 +5,7 @@
 #include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Voxel/AethraBlockColor.h"
+#include "VisualWorld/AethraBlockGen.h"
 #include "Voxel/AethraStats.h"
 #include "Voxel/AethraTerrain.h"
 
@@ -168,6 +169,7 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
     TArray<FVector2D> PlantUV;
     TArray<FLinearColor> PlantColors;
     // Two diagonal quads; the plant material is two-sided. Vertex alpha tells grass (1) from flowers (0.5).
+    const bool bSmoothWater = FAethraBlockGen::IsAethraSeed(World.Seed);
     const auto AddPlant = [&](const FIntVector& Local, EAethraBlock Block)
     {
         const FIntVector Cell = Origin + Local;
@@ -211,6 +213,10 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
                 {
                     AddPlant(Local, Block);
                     continue;
+                }
+                if (Block == EAethraBlock::Water && bSmoothWater)
+                {
+                    continue; // the block world draws one continuous water surface instead (below)
                 }
 
                 for (int32 Side = 0; Side < UE_ARRAY_COUNT(Faces); ++Side)
@@ -284,6 +290,12 @@ void AAethraVoxelChunk::Rebuild(const AAethraVoxelWorld& World)
                 }
             }
         }
+    }
+
+    if (bSmoothWater)
+    {
+        FSection& W = Sections[3];
+        FAethraBlockGen::Get(World.Seed).BuildWaterSurface(FIntPoint(Origin.X, Origin.Y), W.Vertices, W.Normals, W.Triangles, W.UV, W.Colors);
     }
 
     CSV_SCOPED_TIMING_STAT(Aethra, ChunkUpload);

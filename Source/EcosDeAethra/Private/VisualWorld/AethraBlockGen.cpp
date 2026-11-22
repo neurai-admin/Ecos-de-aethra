@@ -385,9 +385,23 @@ FAethraBlockGen::FColumnInfo FAethraBlockGen::ComputeColumn(FIntPoint P) const
     C.Rock = BlockForSurface(FAmeSelector::RockSurface(S.Rock));
     C.Subsoil = BlockIsRock(C.Surface) ? C.Surface : C.Surface == EB::Sand || C.Surface == EB::Gravel ? C.Surface : EB::Dirt;
     C.Ground = FMath::Clamp(FMath::FloorToInt(MapHeight(S.Height)), 2, ColumnHeight - 8);
+    // Near water, the ground stays below the continuous water surface, so the smooth sheet meets the
+    // banks without a stepped shoreline.
+    const float Shore = S.ShoreLevel > -1e8f ? S.ShoreLevel : S.IsWater() ? S.WaterLevel : -1e9f;
+    if (Shore > -1e8f)
+    {
+        C.Plane = MapHeight(Shore);
+        // The bank rises one block per 1.5 m from the water, instead of one wall at the edge of the band.
+        const int32 Rise = S.IsWater() ? 0 : FMath::Max(0, FMath::FloorToInt((S.WaterDistance - .8f) / 1.5f));
+        C.Ground = FMath::Max(2, FMath::Min(C.Ground, FMath::FloorToInt(C.Plane) - 1 + Rise));
+        if (!S.IsWater() && (C.Surface == EB::Dirt || C.Surface == EB::Mud))
+        {
+            C.Surface = EB::Grass; // green banks down to the water
+        }
+    }
     if (S.IsWater())
     {
-        C.WaterTop = FMath::Clamp(FMath::FloorToInt(MapHeight(S.WaterLevel)), 3, ColumnHeight - 8);
+        C.WaterTop = FMath::Clamp(FMath::FloorToInt(C.Plane) - 1, 3, ColumnHeight - 8);
         C.Ground = FMath::Min(C.Ground, C.WaterTop - 1);
         // Beds: sand in the sea, gravel in rivers and streams, mud in lowland lakes.
         const EHydroKind Kind = Gen->GetBodies().IsValidIndex(S.WaterBody) ? Gen->GetBodies()[S.WaterBody].Kind : EHydroKind::River;
@@ -438,6 +452,96 @@ TOptional<FFloraTree> FAethraBlockGen::Tree(FIntPoint Cell) const
     }
     TreeCache.Add(Cell, Result);
     return Result;
+}
+
+void FAethraBlockGen::BuildWaterSurface(FIntPoint O, TArray<FVector>& Vertices, TArray<FVector>& Normals,
+    TArray<int32>& Triangles, TArray<FVector2D>& UV, TArray<FLinearColor>& Colors) const
+{
+    constexpr int32 N = AethraTerrain::ChunkSize;
+    // Cells -1..N around the chunk; corners average their four cells, so neighbouring chunks share edges.
+    struct FCell { float Plane; float Alpha; FVector2f Flow; };
+    FCell Cells[N + 2][N + 2];
+    bool bAny = false;
+    for (int32 Y = -1; Y <= N; ++Y)
+    {
+        for (int32 X = -1; X <= N; ++X)
+        {
+            const FColumnInfo C = Column(O + FIntPoint(X, Y));
+            FCell& Out = Cells[Y + 1][X + 1];
+            Out.Plane = C.Plane;
+            Out.Alpha = C.WaterTop >= 0 ? 1.f : C.Plane > -1e8f ? FMath::Clamp(1.f - C.Sample.WaterDistance / 1.2f, 0.f, 1.f) : 0.f;
+            Out.Flow = C.Sample.Flow;
+            bAny |= Out.Alpha > 0.f && X >= 0 && Y >= 0 && X < N && Y < N;
+        }
+    }
+    if (!bAny)
+    {
+        return;
+    }
+    struct FCorner { float Plane = 0.f; float Alpha = 0.f; FVector2f Flow = FVector2f::ZeroVector; bool bValid = false; };
+    FCorner Corners[N + 1][N + 1];
+    for (int32 J = 0; J <= N; ++J)
+    {
+        for (int32 I = 0; I <= N; ++I)
+        {
+            FCorner& K = Corners[J][I];
+            int32 Count = 0;
+            for (int32 D = 0; D < 4; ++D)
+            {
+                const FCell& C = Cells[J + (D >> 1)][I + (D & 1)];
+                K.Alpha += C.Alpha * .25f;
+                if (C.Plane > -1e8f)
+                {
+                    K.Plane += C.Plane;
+                    K.Flow += C.Flow;
+                    ++Count;
+                }
+            }
+            K.bValid = Count > 0;
+            if (Count)
+            {
+                K.Plane /= Count;
+                K.Flow /= static_cast<float>(Count);
+            }
+        }
+    }
+    for (int32 J = 0; J < N; ++J)
+    {
+        for (int32 I = 0; I < N; ++I)
+        {
+            const FCorner* Q[4] = { &Corners[J][I], &Corners[J][I + 1], &Corners[J + 1][I + 1], &Corners[J + 1][I] };
+            float Level = 0.f, MaxAlpha = 0.f;
+            int32 Valid = 0;
+            for (const FCorner* K : Q)
+            {
+                MaxAlpha = FMath::Max(MaxAlpha, K->Alpha);
+                if (K->bValid)
+                {
+                    Level += K->Plane;
+                    ++Valid;
+                }
+            }
+            if (MaxAlpha < .01f || Valid == 0)
+            {
+                continue;
+            }
+            Level /= Valid;
+            const int32 Start = Vertices.Num();
+            const FIntPoint At[4] = { { I, J }, { I + 1, J }, { I + 1, J + 1 }, { I, J + 1 } };
+            for (int32 V = 0; V < 4; ++V)
+            {
+                const FCorner& K = *Q[V];
+                const float Z = (K.bValid ? K.Plane : Level) * 100.f - 6.f; // just under the true level
+                Vertices.Add(FVector(At[V].X * 100.0, At[V].Y * 100.0, Z));
+                Normals.Add(FVector::UpVector);
+                UV.Add(FVector2D(At[V].X, At[V].Y));
+                const float Speed = K.Flow.Size();
+                const FVector2f Dir = Speed > 1e-3f ? K.Flow / Speed : FVector2f::ZeroVector;
+                Colors.Add(FLinearColor(.5f + .5f * Dir.X, .5f + .5f * Dir.Y, .5f + .5f * FMath::Min(Speed / 1.5f, 1.f), K.Alpha));
+            }
+            Triangles.Append({ Start, Start + 2, Start + 1, Start, Start + 3, Start + 2 });
+        }
+    }
 }
 
 int32 FAethraBlockGen::SurfaceAt(FIntPoint Point) const

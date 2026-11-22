@@ -41,6 +41,12 @@ public:
     int32 SurfaceAt(FIntPoint Point) const;
     void GenerateColumn(FIntPoint Point, TStaticArray<EAethraBlock, ColumnHeight>& Column) const;
 
+    // Continuous water surface of a chunk (rivers, lakes, sea): a smooth sheet at the real water level
+    // with a soft shoreline and the flow in the vertex colour (RG direction, B speed, A edge opacity),
+    // drawn instead of water cubes. Positions in centimetres relative to the chunk origin.
+    void BuildWaterSurface(FIntPoint ChunkOrigin, TArray<FVector>& Vertices, TArray<FVector>& Normals,
+        TArray<int32>& Triangles, TArray<FVector2D>& UV, TArray<FLinearColor>& Colors) const;
+
     const FAethraWorldGen& World() const { return *Gen; }
     const FAethraCaveGen& Caves() const { return *CaveGen; }
     const FAethraRuinGen& Ruins() const { return *RuinGen; }
@@ -55,6 +61,7 @@ private:
         FWorldSample Sample;
         int32 Ground = 0;   // top solid block
         int32 WaterTop = -1; // top water block, -1 = none
+        float Plane = -1e9f; // water surface nearby, in blocks (fractional); also on dry banks
         EAethraBlock Surface = EAethraBlock::Grass;
         EAethraBlock Subsoil = EAethraBlock::Dirt;
         EAethraBlock Rock = EAethraBlock::Stone;

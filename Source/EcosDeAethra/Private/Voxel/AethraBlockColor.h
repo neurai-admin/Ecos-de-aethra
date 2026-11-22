@@ -43,8 +43,8 @@ inline FLinearColor AethraBlockColor(EAethraBlock Block, const FIntVector& Cell,
     default: Tint = FColor::White; break;
     }
 
-    const uint32 Variation = (GetTypeHash(Cell) >> 5) % 16;
-    FLinearColor Result = FLinearColor(Tint) * (0.92f + 0.01f * Variation);
+    // One tint per block type (no per-block variation): neighbouring blocks read as one surface.
+    FLinearColor Result = FLinearColor(Tint) * 0.995f;
     // Alpha = block id / 31: the materials pick the per-block pattern from it (exact in 8 bits).
     Result.A = static_cast<uint8>(Block) / 31.0f;
     return Result;

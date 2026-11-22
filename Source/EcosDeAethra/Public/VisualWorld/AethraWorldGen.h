@@ -20,6 +20,7 @@ struct FWorldSample
 {
     float Height = 0.f;       // terrain surface, metres
     float WaterLevel = -1e9f; // water surface, metres (below Height = dry)
+    float ShoreLevel = -1e9f; // surface of the water within a few metres (also on dry banks), metres
     int32 WaterBody = -1;     // FAethraWorldGen::Bodies index, -1 = none
     float WaterDistance = 1e6f; // metres to the nearest water edge (approximate)
     float RiverStrength = 0.f;  // 0 none .. 1 big river
